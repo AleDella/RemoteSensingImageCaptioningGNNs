@@ -1,4 +1,5 @@
 import sng_parser
+from gensim.models import Word2Vec
 
 
 def extract_encoding(sentences):
@@ -34,3 +35,43 @@ def extract_encoding(sentences):
                 id += 1
     
     return word2idx, idx2word
+
+
+
+def create_feats(sentences, save_feats=False, save_model=False, loaded_model=None):
+    '''
+    Extract the features for the relevant words in the caption. 
+    NB: "relevant" means that are the labels of nodes and edges of the scene graphs
+
+    Input:
+        sentences: list of sentences
+        save_feats: if True, saves the features for the words in a json file (Default False)
+        save_model: if True, saves the word2vec model in the same folder (Default False)
+        loaded_model: if not None, load the word2vec model indicated in the specified path (Default None)
+    
+    Return:
+        None
+    '''
+    for sentence in sentences:
+        g = sng_parser.parse(sentence)
+        # Get the tokenization like in the graph
+        result = []
+        for rel in g['relations']:
+            sentence = []
+            sentence.append(g['entities'][rel['subject']]['head'])
+            sentence.append(rel['relation'])
+            sentence.append(g['entities'][rel['object']]['head'])
+            result.append(sentence)
+        # Train word2vec on the sentences for the embeddings
+        if loaded_model is None:
+            model = Word2Vec(result, min_count=1)
+        else:
+            model = Word2Vec.load(loaded_model)
+        
+        if save_model:
+            print("Saving word2vec model...")
+            model.save('word2vecUAV.bin')
+        
+        if save_feats:
+            print("Saving features of the words in the captions...")
+            # TBI
