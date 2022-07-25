@@ -1,5 +1,5 @@
 # Provone
 
 For now, there are two files in the repo:
-    + <graph_utils.py> that contains the final function that will be used to pre-process the captions
-    + <prodcue_graph_libs.py> that is used as demo to understand graphs from senteces
+    <li> <code>graph_utils.py</code> that contains the final function that will be used to pre-process the captions</li>
+    <li> <code>prodcue_graph_libs.py</code> that is used as demo to understand graphs from senteces</li>
