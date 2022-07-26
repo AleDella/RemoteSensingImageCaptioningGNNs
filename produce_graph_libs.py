@@ -35,7 +35,7 @@ def sentence_to_dgl(sentence, visualize=True):
 ############# TEST CODE #######################
 
 # Define the sentence
-sentence = 'James is running in the park.'
+sentence = 'a river goes through this area with a forest on one bank and a road on the other side'
 
 # Check the table to see the resulting graph for the sentence
 print("Right relations: ")

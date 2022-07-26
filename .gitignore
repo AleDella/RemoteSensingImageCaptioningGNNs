@@ -3,3 +3,4 @@ pre_trained_models/
 playground.py
 dataset/
 __pycache__
+triplets.json

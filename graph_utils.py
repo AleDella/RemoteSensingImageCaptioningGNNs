@@ -38,7 +38,7 @@ def extract_encoding(sentences):
 
 
 
-def create_feats(sentences, save_feats=False, save_model=False, loaded_model=None):
+def create_feats(sentences, save_feats=False, save_model=False, loaded_model=None, tokenize=False):
     '''
     Extract the features for the relevant words in the caption. 
     NB: "relevant" means that are the labels of nodes and edges of the scene graphs
@@ -48,9 +48,11 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
         save_feats: if True, saves the features for the words in a json file (Default False)
         save_model: if True, saves the word2vec model in the same folder (Default False)
         loaded_model: if not None, load the word2vec model indicated in the specified path (Default None)
+        tokenize: if True, returns the tokenized sentences using entities of the graph
     
     Return:
-        None
+        model: the word2vec model
+        final_input: tokenized sentences
     '''
 
     final_input = []
@@ -68,8 +70,11 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
     if loaded_model is None:
         model = Word2Vec(final_input, min_count=1)
     else:
+        # Fine tune the model
         model = Word2Vec.load(loaded_model)
     
+    
+
     if save_model:
         print("Saving word2vec model...")
         model.save('word2vecUAV.bin')
@@ -78,4 +83,7 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
         print("Saving features of the words in the captions...")
         # TBI
 
-    return model
+    if tokenize:
+        return final_input
+    else:
+        return model
