@@ -52,26 +52,30 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
     Return:
         None
     '''
+
+    final_input = []
     for sentence in sentences:
         g = sng_parser.parse(sentence)
         # Get the tokenization like in the graph
-        result = []
+        sentence = []
         for rel in g['relations']:
-            sentence = []
             sentence.append(g['entities'][rel['subject']]['head'])
             sentence.append(rel['relation'])
             sentence.append(g['entities'][rel['object']]['head'])
-            result.append(sentence)
-        # Train word2vec on the sentences for the embeddings
-        if loaded_model is None:
-            model = Word2Vec(result, min_count=1)
-        else:
-            model = Word2Vec.load(loaded_model)
-        
-        if save_model:
-            print("Saving word2vec model...")
-            model.save('word2vecUAV.bin')
-        
-        if save_feats:
-            print("Saving features of the words in the captions...")
-            # TBI
+        final_input.append(sentence)
+    print("Final input: ", final_input)
+    # Train word2vec on the sentences for the embeddings
+    if loaded_model is None:
+        model = Word2Vec(final_input, min_count=1)
+    else:
+        model = Word2Vec.load(loaded_model)
+    
+    if save_model:
+        print("Saving word2vec model...")
+        model.save('word2vecUAV.bin')
+    
+    if save_feats:
+        print("Saving features of the words in the captions...")
+        # TBI
+
+    return model
