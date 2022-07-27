@@ -4,3 +4,4 @@ playground.py
 dataset/
 __pycache__
 triplets.json
+tripletsRSICD.json
