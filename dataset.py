@@ -51,7 +51,8 @@ class UCMTriplets(Dataset):
                 self.captions[id] = [sentence]
         self.node_feats = {}
         self.rel_feats = {}
-        self.graphs = {}
+        self.src_ids = {}
+        self.dst_ids = {}
         f_split = {}
         for id in full_data[split]:
             f_tripl = []
@@ -81,9 +82,10 @@ class UCMTriplets(Dataset):
                 # Create source and destination lists
                 src_ids.append(tmp_dict[tripl[0]])
                 dst_ids.append(tmp_dict[tripl[2]])
+            self.src_ids[id] = src_ids
+            self.dst_ids[id] = dst_ids
             self.node_feats[id] = node_feats
             self.rel_feats[id] = rel_feats
-            self.graphs[id] = dgl.graph((src_ids, dst_ids))
             f_split[id] = f_tripl
         self.features = f_split
         
@@ -98,7 +100,7 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         
-        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'graphs':self.graphs[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
+        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
         return sample
 
 
@@ -119,9 +121,9 @@ if __name__== "__main__":
     # example of dataset sample
     print(dataset[0].keys())
     print(str(time.time()-ini))
-    
+
     dataloader = DataLoader(dataset,batch_size=1)
-    
+
     for i, data in enumerate(dataloader):
         ini = time.time()
         data_dataloader = data
