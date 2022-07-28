@@ -10,8 +10,6 @@ def readfile(path):
         text = file.readlines()
     return text
 
-
-
 class UCMTriplets(Dataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
@@ -102,6 +100,8 @@ class UCMTriplets(Dataset):
 
 # Test code
 if __name__== "__main__":
+    import time
+    ini = time.time()
     tripl_path = 'example_tripl.json'
     anno_path = 'example_anno.txt'
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -109,3 +109,4 @@ if __name__== "__main__":
     dataset = UCMTriplets(tripl_path, anno_path, model, tokenizer, split='train')
     # example of dataset sample
     print(dataset[0].keys())
+    print(str(time.time()-ini))
