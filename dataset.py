@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import dgl
 import json
 from transformers import BertTokenizer, BertModel
@@ -119,3 +119,10 @@ if __name__== "__main__":
     # example of dataset sample
     print(dataset[0].keys())
     print(str(time.time()-ini))
+    
+    dataloader = DataLoader(dataset,batch_size=1)
+    
+    for i, data in enumerate(dataloader):
+        ini = time.time()
+        data_dataloader = data
+        print(time.time()-ini)
