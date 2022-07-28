@@ -4,5 +4,3 @@ playground.py
 dataset/
 __pycache__
 tripletsRSICD.json
-example_tripl.json
-example_anno.txt

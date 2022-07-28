@@ -1,0 +1,10 @@
+1 there is a piece of farmland 
+1 there is a piece of cropland 
+1 it is a piece of farmland 
+1 it is a piece of cropland 
+1 here is a piece of farmland 
+1289 it is a medium residential area 
+1289 a medium residential area with houses sorrounded by plants 
+1289 a medium residential area with a narrow road goes through this area 
+1289 some houses with plants surrounded in the medium residential area 
+1289 this is a medium residential area with houses and plants and a narrow road goes through
