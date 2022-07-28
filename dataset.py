@@ -98,7 +98,7 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         
-        sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'graphs':self.graphs[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
+        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'graphs':self.graphs[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
         return sample
 
 
