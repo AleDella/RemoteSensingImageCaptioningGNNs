@@ -56,7 +56,7 @@ class GNN(nn.Module):
 
 
 ##################################
-# Taken from MLAP code
+# Taken from MLAP code (STILL TO ADAPT)
 def _encode_seq_to_arr(seq: list[str], vocab2idx: dict[str, int], max_seq_len: int) -> torch.Tensor:
     seq = seq[:max_seq_len] + ["__EOS__"] * max(0, max_seq_len - len(seq))
     return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["__UNK__"] for w in seq], dtype=torch.int64)
