@@ -59,6 +59,6 @@ class GNN(nn.Module):
 # Testing
 if __name__ == '__main__':
     node_feats = torch.rand((5, 300))
-    model = Model(300, 300, 8)
+    model = GNN(300, 300)
     g = dgl.rand_graph(5, 3)
     output = model(g, node_feats)
