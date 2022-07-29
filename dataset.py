@@ -16,13 +16,18 @@ class UCMTriplets(Dataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
-    def __init__(self, image_folder, image_filenames, triplets_path, caption_path, model, tokenizer, return_keys, split=None):
+    def __init__(self, image_folder, image_filenames, triplets_path, caption_path, model, tokenizer, return_keys, split=None, classification=False):
         '''
         Args:
+            image_folder: path to the folder with all the images
+            image_filenames: path to the file with all the filenames
             triplets_path: path to the JSON containing the triplets
             caption_path: path to the TXT containing the captions
             model: model used to produce the features for the tokens
             tokenizer: tokenizer used to extract ids from the tokens
+            return_keys: list of keys to return in the sample
+            split: define if its train, val or test split
+            classification: if True, use triplet2idx and idx2triplet
         '''
         # Save return keys
         self.return_keys = return_keys
@@ -39,9 +44,10 @@ class UCMTriplets(Dataset):
         full_data = json.load(f)
         f.close()
         
-        # FOR TRIPLET CLASSIFICATION 
-        self.unique_triplets = len(full_data['Triplet_to_idx'])
-        self.triplet_to_idx = full_data['Triplet_to_idx']
+        # FOR TRIPLET CLASSIFICATION
+        if classification: 
+            self.unique_triplets = len(full_data['Triplet_to_idx'])
+            self.triplet_to_idx = full_data['Triplet_to_idx']
         
         if split is None:
             self.triplets = full_data
@@ -63,40 +69,41 @@ class UCMTriplets(Dataset):
         f_split = {}
         
         # Here to check what happen when split is not passed
-        for id in full_data[split]:
+        for id in self.triplets:
             f_tripl = []
             tmp_dict = {}
             tmp_id = 0
-            added_rel = []
             src_ids = []
             dst_ids = []
             node_feats = []
-            rel_feats = []
-        #     # Extract features from triplets
-        #     for i, tripl in enumerate(full_data[split][id]):
-        #         encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
-        #         output = model(**encoded_input)
-        #         f_tripl.append(output.pooler_output)
-        #         if tripl[0] not in list(tmp_dict.keys()):
-        #             tmp_dict[tripl[0]]=tmp_id
-        #             tmp_id+=1
-        #             node_feats.append(output.pooler_output[0])
-        #         if tripl[2] not in list(tmp_dict.keys()):
-        #             tmp_dict[tripl[2]]=tmp_id
-        #             tmp_id+=1
-        #             node_feats.append(output.pooler_output[2])
-        #         # Add the relation
-        #         rel_feats.append(output.pooler_output[1])
-        #         added_rel.append(tripl[1])
-        #         # Create source and destination lists
-        #         src_ids.append(tmp_dict[tripl[0]])
-        #         dst_ids.append(tmp_dict[tripl[2]])
-        #     self.src_ids[id] = src_ids
-        #     self.dst_ids[id] = dst_ids
-        #     self.node_feats[id] = node_feats
-        #     self.rel_feats[id] = rel_feats
-        #     f_split[id] = f_tripl
-        # self.features = f_split
+            # Extract features from triplets
+            for i, tripl in enumerate(self.triplets[id]):
+                encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
+                output = model(**encoded_input)
+                f_tripl.append(output.pooler_output)
+                if tripl[0] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[0]]=tmp_id
+                    tmp_id+=1
+                    node_feats.append(list(output.pooler_output[0]))
+                if tripl[1] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[1]]=tmp_id
+                    tmp_id+=1
+                    node_feats.append(list(output.pooler_output[1]))
+                if tripl[2] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[2]]=tmp_id
+                    tmp_id+=1
+                    node_feats.append(list(output.pooler_output[2]))
+                
+                # Create source and destination lists
+                src_ids.append(tmp_dict[tripl[0]])
+                dst_ids.append(tmp_dict[tripl[1]])
+                src_ids.append(tmp_dict[tripl[1]])
+                dst_ids.append(tmp_dict[tripl[2]])
+            self.src_ids[id] = src_ids
+            self.dst_ids[id] = dst_ids
+            self.node_feats[id] = torch.Tensor(node_feats)
+            f_split[id] = f_tripl
+        self.features = f_split
         
     
     def __len__(self):
@@ -109,8 +116,8 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         
-        #sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
-        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
+        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id]}
+        # sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
         
