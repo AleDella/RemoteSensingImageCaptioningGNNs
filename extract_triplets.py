@@ -1,5 +1,6 @@
 import json
 import sng_parser
+from tqdm import tqdm
 
 def extract_ent(sentences):
     final_input = []
@@ -82,35 +83,46 @@ for annot in annotations:
             vocabulary[token]=1
 
 # Filter words with occurrence less than 5 
-words_to_keep = [key for key in vocabulary.keys() if vocabulary[key]>5]
+words_to_keep = [key for key in vocabulary.keys() if vocabulary[key]>=1]
 words_to_discard = [key for key in vocabulary.keys() if key not in words_to_keep]
 
 # Create the triplets and store them in the dictionary
 final_file = {'train': {}, 'test': {}, 'val': {}}
 all_triplets = []
-for annot in annotations:
-    print(annot)
+for annot in tqdm(annotations):
     image = annot.split(" ")[0]
     triplets = extract_triplets(annot)
-    print(triplets)
     if(image in train_list):
-        final_file["train"][image] = triplets
+        try:
+            final_file["train"][image].append(triplets)
+        except:
+            final_file["train"][image] = triplets
     elif(image in test_list):
-        final_file["test"][image] = triplets
+        try:
+            final_file["test"][image].append(triplets)
+        except:
+            final_file["test"][image] = triplets
     elif(image in val_list):
-        final_file["val"][image] = triplets
+        try:
+            final_file["val"][image].append(triplets)
+        except:
+            final_file["val"][image] = triplets
     else:
         raise Exception("Something went wrong, find an image not assigned to any of train test or val splits")     
     
     for triplet in triplets:
         all_triplets.append(triplet)
     
-with open("triplets.json", "w") as outfile:
-    json.dump(final_file, outfile)
-    
 all_triplets = set(all_triplets)
 
+
 print("Total number of unclean triplets found: ", len(all_triplets))
+
+triplet_to_idx = {}
+for i, triplet in enumerate(all_triplets):
+    triplet_to_idx[str(triplet)] = i  # cast to string to make it become dictionary key
+
+final_file['Triplet_to_idx'] = triplet_to_idx
 
 # Cleaning triplets
 clean_triplets = []
@@ -124,3 +136,7 @@ for triplet in all_triplets:
         clean_triplets.append(triplet)
 
 print("Total number of cleaned triplets found: ", len(clean_triplets))
+
+
+with open("triplets.json", "w") as outfile:
+    json.dump(final_file, outfile)

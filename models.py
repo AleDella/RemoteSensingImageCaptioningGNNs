@@ -38,4 +38,3 @@ if __name__=="__main__":
     model = TripletClassifier(224,10)
     dummy_img = torch.randn((5,3,224,224))
     out = model(dummy_img)
-    
