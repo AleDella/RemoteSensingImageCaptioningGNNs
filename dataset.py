@@ -72,31 +72,31 @@ class UCMTriplets(Dataset):
             dst_ids = []
             node_feats = []
             rel_feats = []
-            # Extract features from triplets
-            for i, tripl in enumerate(full_data[split][id]):
-                encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
-                output = model(**encoded_input)
-                f_tripl.append(output.pooler_output)
-                if tripl[0] not in list(tmp_dict.keys()):
-                    tmp_dict[tripl[0]]=tmp_id
-                    tmp_id+=1
-                    node_feats.append(output.pooler_output[0])
-                if tripl[2] not in list(tmp_dict.keys()):
-                    tmp_dict[tripl[2]]=tmp_id
-                    tmp_id+=1
-                    node_feats.append(output.pooler_output[2])
-                # Add the relation
-                rel_feats.append(output.pooler_output[1])
-                added_rel.append(tripl[1])
-                # Create source and destination lists
-                src_ids.append(tmp_dict[tripl[0]])
-                dst_ids.append(tmp_dict[tripl[2]])
-            self.src_ids[id] = src_ids
-            self.dst_ids[id] = dst_ids
-            self.node_feats[id] = node_feats
-            self.rel_feats[id] = rel_feats
-            f_split[id] = f_tripl
-        self.features = f_split
+        #     # Extract features from triplets
+        #     for i, tripl in enumerate(full_data[split][id]):
+        #         encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
+        #         output = model(**encoded_input)
+        #         f_tripl.append(output.pooler_output)
+        #         if tripl[0] not in list(tmp_dict.keys()):
+        #             tmp_dict[tripl[0]]=tmp_id
+        #             tmp_id+=1
+        #             node_feats.append(output.pooler_output[0])
+        #         if tripl[2] not in list(tmp_dict.keys()):
+        #             tmp_dict[tripl[2]]=tmp_id
+        #             tmp_id+=1
+        #             node_feats.append(output.pooler_output[2])
+        #         # Add the relation
+        #         rel_feats.append(output.pooler_output[1])
+        #         added_rel.append(tripl[1])
+        #         # Create source and destination lists
+        #         src_ids.append(tmp_dict[tripl[0]])
+        #         dst_ids.append(tmp_dict[tripl[2]])
+        #     self.src_ids[id] = src_ids
+        #     self.dst_ids[id] = dst_ids
+        #     self.node_feats[id] = node_feats
+        #     self.rel_feats[id] = rel_feats
+        #     f_split[id] = f_tripl
+        # self.features = f_split
         
     
     def __len__(self):
@@ -109,8 +109,8 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         
-        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
-        
+        #sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'rel_feats':self.rel_feats[id]}
+        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
         
@@ -123,17 +123,27 @@ def collate_fn_classifier(data, triplet_to_idx):
     '''
     images = [d['image'] for d in data]
     triplets = [d['triplets'] for d in data]
-    captions = [d['captions'] for d in data]
         
     images = torch.stack(images, 0)
     images = images.permute(0,3,1,2)
+    # Between 0 and 1 for pytorch
+    images = images/255
     
-    print(triplets[3])
-    print(captions[3])
+    triplets_tensor = torch.zeros((len(triplets),len(triplet_to_idx))) # To store one hot encodings
     
-    #print(data[0]['triplets'].shape)
+    i=0
+    for image_triplet in triplets[0]:
+        for triplet in image_triplet:
+            triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
+
+    #     indices = torch.nonzero(triplets_tensor[0,:])
+    #     print(indices)
+    #     for index in indices:
+    #         print([key for key in triplet_to_idx.keys() if triplet_to_idx[key]==index])
+        
+    # print(triplets[0])
     
-    return None
+    return images, triplets_tensor
 
 # Test code
 if __name__== "__main__":
