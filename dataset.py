@@ -55,13 +55,28 @@ class UCMTriplets(Dataset):
             self.triplets = full_data[split]
 
         self.captions = {}
+        # GLOBAL word2idx for the LSTM decoder
+        self.word2idx = {}
+        self.max_capt_length = 0
+        self.word2idx["__UNK__"] = 0
+        self.word2idx["__EOS__"] = 1
+        word_id = 2
         for anno in readfile(caption_path):
             id = int(anno.split(" ")[:1][0])
+            # sentence = anno.replace(' \n', '')[2:]
             sentence = anno.replace(' \n', '').split(" ")[1:]
             try:
                 self.captions[id].append(sentence)
             except:
                 self.captions[id] = [sentence]
+            if len(sentence)>self.max_capt_length:
+                self.max_capt_length = len(sentence)
+            # Word2idx part
+            for token in sentence:
+                if token not in list(self.word2idx.keys()):
+                    self.word2idx[token] = word_id
+                    word_id+=1
+        
         self.node_feats = {}
         self.rel_feats = {}
         self.src_ids = {}
