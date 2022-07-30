@@ -6,7 +6,7 @@ Files in the repo:
     <li> <code>extract_triplets.py</code> file used to extract triplets from captions</li>
     <li> <code>train.py</code> file containing the training procedures</li>
     <li> <code>main.py</code> file containing the main (for now only for the first part of the model)</li>
-    <li> <code>models.py</code> contains the model definition for triplets classification (for now)</li>
+    <li> <code>models.py</code> contains the model definition for triplets classification and the second part of the task(for now)</li>
     <li> <code>gnn.py</code> contains the model definition for the Graph neural network (for now)</li>
     <li> <code>dataset.py</code> contains the definition for the dataset class for both tasks</li>
 
