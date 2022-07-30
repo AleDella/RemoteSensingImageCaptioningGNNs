@@ -79,9 +79,9 @@ class LSTMDecoder(nn.Module):
             batched_label = torch.vstack([_encode_seq_to_arr(label, self._vocab2idx, self._max_seq_len - 1) for label in labels])
             batched_label = torch.hstack((torch.zeros((graph.batch_size, 1), dtype=torch.int64), batched_label))
             true_emb = self.vocab_encoder(batched_label.to(device=graph.device))
-
-        h_t, c_t = feats[-1].clone(), feats[-1].clone()
-        feats = feats.transpose(0, 1)  # (batch_size, L + 1, dim_feat)
+        # h_t, c_t = feats[-1].clone(), feats[-1].clone()
+        h_t, c_t = feats.clone(), feats.clone()
+        # feats = feats.transpose(0, 1)  # (batch_size, L + 1, dim_feat)
         out = []
         pred_emb = self.vocab_encoder(torch.zeros((graph.batch_size), dtype=torch.int64, device=graph.device))
 
@@ -93,10 +93,10 @@ class LSTMDecoder(nn.Module):
             else:
                 _in = pred_emb
             h_t, c_t = self.lstm(_in, (h_t, c_t))
-
-            a = F.softmax(torch.bmm(feats, h_t.unsqueeze(-1)).squeeze(-1), dim=1)  # (batch_size, L + 1)
-            context = torch.bmm(a.unsqueeze(1), feats).squeeze(1)
-            pred_emb = torch.tanh(self.layernorm(self.w_hc(torch.hstack((h_t, context)))))  # (batch_size, dim_feat)
+            a = F.softmax(torch.bmm(feats.unsqueeze(-1), h_t.unsqueeze(0)).squeeze(-1), dim=1)  # (batch_size, L + 1)
+            context = torch.bmm(a, feats.unsqueeze(-1)).squeeze(1)
+            # print("HT: {}\tContext: {}\n".format(h_t.shape, context.shape))
+            pred_emb = torch.tanh(self.layernorm(self.w_hc(torch.hstack((h_t, context.squeeze(-1))))))  # (batch_size, dim_feat)
 
             out.append(torch.matmul(pred_emb, vocab_mat.T) + self.vocab_bias.unsqueeze(0))
 
