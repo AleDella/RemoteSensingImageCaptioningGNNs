@@ -114,6 +114,9 @@ def get_node_features(features, num_nodes):
             
             
 def decode_output(out, idx2word):
+    '''
+    Function that decodes the network's output into the actual captions
+    '''
     ids = []
     sentences = [[] for i in range(out[0].size(0))]
     for tok in out:
@@ -121,6 +124,5 @@ def decode_output(out, idx2word):
     for tok in ids:
         for i, id in enumerate(tok):
             sentences[i].append(idx2word[id])
-    print(sentences)
             
-    # return [idx2word[tok.argmax().item()] for tok in out]
+    return sentences
