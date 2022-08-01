@@ -34,6 +34,9 @@ class TripletClassifier(nn.Module):
         
         return self.model(x)
 
+def load_model(path):
+    return torch.load(path)
+    
 class CaptionGenerator(nn.Module):
 
     def __init__(self, feats_dim, max_seq_len, vocab2idx) -> None:
