@@ -57,9 +57,9 @@ class GNN(nn.Module):
 
 ##################################
 # Taken from MLAP code (STILL TO ADAPT)
-def _encode_seq_to_arr(seq: list[str], vocab2idx: dict[str, int], max_seq_len: int) -> torch.Tensor:
-    seq = seq[:max_seq_len] + ["__EOS__"] * max(0, max_seq_len - len(seq))
-    return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["__UNK__"] for w in seq], dtype=torch.int64)
+def _encode_seq_to_arr(sequence: list[str], vocab2idx: dict[str, int], max_seq_len: int) -> torch.Tensor:
+    seq = [seq[:max_seq_len] + ["__EOS__"] * max(0, max_seq_len - len(seq)) for seq in sequence]
+    return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["__UNK__"] for x in seq for w in x], dtype=torch.int64)
 
 class LSTMDecoder(nn.Module):
     def __init__(self, dim_feat: int, max_seq_len: int, vocab2idx: dict[str, int]):
@@ -93,7 +93,7 @@ class LSTMDecoder(nn.Module):
             else:
                 _in = pred_emb
             h_t, c_t = self.lstm(_in, (h_t, c_t))
-            a = F.softmax(torch.bmm(feats.unsqueeze(-1), h_t.unsqueeze(0)).squeeze(-1), dim=1)  # (batch_size, L + 1)
+            a = F.softmax(torch.bmm(feats.unsqueeze(-1), h_t.unsqueeze(1)), dim=1)  # (batch_size, L + 1)
             context = torch.bmm(a, feats.unsqueeze(-1)).squeeze(1)
             # print("HT: {}\tContext: {}\n".format(h_t.shape, context.shape))
             pred_emb = torch.tanh(self.layernorm(self.w_hc(torch.hstack((h_t, context.squeeze(-1))))))  # (batch_size, dim_feat)

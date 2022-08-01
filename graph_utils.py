@@ -1,6 +1,7 @@
+from numpy import argmax
 import sng_parser
 from gensim.models import Word2Vec
-
+import torch
 
 def extract_encoding(sentences):
     '''
@@ -87,3 +88,39 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
         return final_input
     else:
         return model
+
+def get_node_features(features, num_nodes):
+    '''
+    Given the padded node features, extract the original ones
+
+    Args:
+        features: tensor with the padded features (batch_size, max_num_nodes, feature_size)
+        num_nodes: total number of nodes of the unified graph
+    
+    Return:
+        new_feats: tensor with the features for each node (total_num_nodes, feat_size)
+    '''
+    new_feats = torch.zeros((num_nodes, features.size(-1)))
+    checkpoint = 0
+    for sample in features:
+        for feat in sample:
+            if sum(feat) == 0.0:
+                continue
+            else:
+                new_feats[checkpoint] = feat
+                checkpoint+=1
+    
+    return new_feats
+            
+            
+def decode_output(out, idx2word):
+    ids = []
+    sentences = [[] for i in range(out[0].size(0))]
+    for tok in out:
+        ids.append([argmax(emb.detach().numpy()) for emb in tok])
+    for tok in ids:
+        for i, id in enumerate(tok):
+            sentences[i].append(idx2word[id])
+    print(sentences)
+            
+    # return [idx2word[tok.argmax().item()] for tok in out]
