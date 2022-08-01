@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import resnet152
+from gnn import GNN, LSTMDecoder
 
 class TripletClassifier(nn.Module):
     '''
@@ -32,7 +33,25 @@ class TripletClassifier(nn.Module):
         assert x.shape[3]==self.input_size
         
         return self.model(x)
+
+def load_model(path):
+    return torch.load(path)
     
+class CaptionGenerator(nn.Module):
+
+    def __init__(self, feats_dim, max_seq_len, vocab2idx) -> None:
+        super(CaptionGenerator, self).__init__()
+        self.encoder = GNN(feats_dim, feats_dim)
+        self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
+        self.max_seq_len = max_seq_len
+        self.vocab2idx = vocab2idx
+        self.idx2vocab = {v: k for k, v in vocab2idx.items()}
+
+    def forward(self, g, feats, labels):
+        graph_feats = self.encoder(g, feats)
+        decoded_out = self.decoder(g, graph_feats, labels)
+        return decoded_out
+
 
 if __name__=="__main__":
     model = TripletClassifier(224,10)

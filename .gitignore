@@ -4,3 +4,6 @@ playground.py
 dataset/
 __pycache__
 tripletsRSICD.json
+
+model_finetuned.pth
+model.pth

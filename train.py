@@ -65,3 +65,52 @@ class classifier_trainer():
             print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
         
         torch.save(self.model,self.save_path)
+    
+    def finetune(self, model, epochs, learning_rate, batch_size):
+        self.model = model
+        # Set all the parameters to trainable 
+        for param in self.model.parameters():
+            param.requires_grad = True
+            
+        trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
+        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
+        # Define the criterion
+        criterion = nn.BCEWithLogitsLoss(reduction='mean')
+        # Define the optimizer
+        optimizer = optim.SGD(self.model.parameters(), lr=learning_rate)
+        
+        if(self.use_cuda):
+            self.model = self.model.to(self.device)
+        
+        for epoch in range(epochs):
+            self.model.train()
+            epoch_loss_train = 0
+            epoch_loss_val = 0
+            print('Epoch: '+str(epoch))
+            for i, data in enumerate(tqdm(trainloader)):
+                images, triplets = data
+                images = images.to(self.device)
+                triplets = triplets.to(self.device)
+                outputs = self.model(images)
+                optimizer.zero_grad()
+                loss = criterion(outputs,triplets)
+                loss.backward()
+                optimizer.step()
+                epoch_loss_train+=loss.item()
+            
+            with torch.no_grad():
+                self.model.eval()
+                for j, data in enumerate(tqdm(valloader)):
+                    images, triplets = data
+                    images = images.to(self.device)
+                    triplets = triplets.to(self.device)
+                    outputs = self.model(images)
+                    loss = criterion(outputs,triplets)
+                    epoch_loss_val+=loss.item()
+                    
+            
+            print('Training loss: {:.3f}'.format(epoch_loss_train/i))
+            print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+        
+        torch.save(self.model,self.save_path)
+        
