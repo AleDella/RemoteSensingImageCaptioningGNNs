@@ -180,6 +180,7 @@ def collate_fn_captions(data):
     num_nodes = [d['num_nodes'] for d in data]
     max_rel = len(max(src_ids, key=len))
     max_nodes = max(num_nodes)
+    # ID
     for i, elem in enumerate(src_ids):
         # Add self loops to fix length
         while len(elem)<max_rel:
@@ -191,8 +192,12 @@ def collate_fn_captions(data):
             for j in range(node_feats[i].size(0)):
                 new_node_feats[j] = node_feats[i][j]
             node_feats[i] = new_node_feats
+    # Create the final Tensor
+    new_feats = torch.zeros((len(node_feats), node_feats[0].size(0), node_feats[0].size(1)))
+    for i, elem in enumerate(node_feats):
+        new_feats[i] = elem
     
-    return {'src_ids': src_ids, 'dst_ids': dst_ids, 'node_feats': node_feats, 'num_nodes': num_nodes}
+    return {'captions': [d['captions'] for d in data], 'src_ids': src_ids, 'dst_ids': dst_ids, 'node_feats': new_feats, 'num_nodes': num_nodes}
             
 
 
