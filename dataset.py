@@ -78,6 +78,7 @@ class UCMTriplets(Dataset):
                     word_id+=1
         
         self.node_feats = {}
+        self.num_nodes = {}
         self.rel_feats = {}
         self.src_ids = {}
         self.dst_ids = {}
@@ -117,6 +118,7 @@ class UCMTriplets(Dataset):
             self.src_ids[id] = src_ids
             self.dst_ids[id] = dst_ids
             self.node_feats[id] = torch.Tensor(node_feats)
+            self.num_nodes[id] = len(node_feats)
             f_split[id] = f_tripl
         self.features = f_split
         
@@ -131,7 +133,7 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         
-        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id]}
+        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
         # sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
@@ -166,6 +168,36 @@ def collate_fn_classifier(data, triplet_to_idx):
     # print(triplets[0])
     
     return images, triplets_tensor
+
+
+def collate_fn_captions(data):
+    '''
+    Collate function for the graph to caption
+    '''
+    src_ids = [d['src_ids'] for d in data]
+    dst_ids = [d['dst_ids'] for d in data]
+    node_feats = [d['node_feats'] for d in data]
+    num_nodes = [d['num_nodes'] for d in data]
+    max_rel = len(max(src_ids, key=len))
+    max_nodes = max(num_nodes)
+    for i, elem in enumerate(src_ids):
+        # Add self loops to fix length
+        while len(elem)<max_rel:
+            src_ids[i].append(0)
+            dst_ids[i].append(0)
+        # Add random node feats to fix lengths
+        if node_feats[i].size(0)<max_nodes:
+            new_node_feats = torch.zeros((node_feats[i].size(0)+(max_nodes-node_feats[i].size(0)), node_feats[i].size(1)))
+            for j in range(node_feats[i].size(0)):
+                new_node_feats[j] = node_feats[i][j]
+            node_feats[i] = new_node_feats
+    
+    return {'src_ids': src_ids, 'dst_ids': dst_ids, 'node_feats': node_feats, 'num_nodes': num_nodes}
+            
+
+
+
+
 
 # Test code
 if __name__== "__main__":
