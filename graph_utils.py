@@ -139,3 +139,21 @@ def encode_caption(caption, word2idx):
         sentences.append(tmp)
 
     return torch.Tensor(sentences)
+
+
+
+
+def polish_triplets(triplets):
+    '''
+    Function that deletes double triplets and eliminates sentence division
+    '''
+    new_tripl = {}
+    for id in triplets:
+        final_tripl = []
+        for sentence in triplets[id]:
+            for tripl in sentence:
+                if tripl not in final_tripl:
+                    final_tripl.append(tripl)
+        new_tripl[id] = final_tripl
+    
+    return new_tripl
