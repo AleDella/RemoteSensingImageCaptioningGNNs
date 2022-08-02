@@ -1,9 +1,9 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import json
 from transformers import BertTokenizer, BertModel
 import cv2
-import numpy as np
+from graph_utils import polish_triplets
 
 
 # Util function cpied by extract_triplets
@@ -89,9 +89,9 @@ class UCMTriplets(Dataset):
         self.src_ids = {}
         self.dst_ids = {}
         f_split = {}
-        
+        caption_tripl = polish_triplets(self.triplets)
         # Here to check what happen when split is not passed
-        for id in self.triplets:
+        for id in caption_tripl:
             f_tripl = []
             tmp_dict = {}
             tmp_id = 0
@@ -99,7 +99,7 @@ class UCMTriplets(Dataset):
             dst_ids = []
             node_feats = []
             # Extract features from triplets
-            for i, tripl in enumerate(self.triplets[id]):
+            for i, tripl in enumerate(caption_tripl[id]):
                 encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
                 output = model(**encoded_input)
                 f_tripl.append(output.pooler_output)
