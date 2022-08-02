@@ -1,7 +1,8 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 from torchvision.models import resnet152
-from gnn import GNN, LSTMDecoder
+from gnn import GNN, LSTMDecoder, _encode_seq_to_arr
 
 class TripletClassifier(nn.Module):
     '''
@@ -38,7 +39,14 @@ def load_model(path):
     return torch.load(path)
     
 class CaptionGenerator(nn.Module):
+    '''
+    Caption generation network (encoder-decoder)
 
+    Args:
+        feats_dim: dimension of the features
+        max_seq_len: maximum tokens in a caption
+        vocab2idx: dictionary for one hot encoding of tokens
+    '''
     def __init__(self, feats_dim, max_seq_len, vocab2idx) -> None:
         super(CaptionGenerator, self).__init__()
         self.encoder = GNN(feats_dim, feats_dim)
@@ -52,6 +60,9 @@ class CaptionGenerator(nn.Module):
         decoded_out = self.decoder(g, graph_feats, labels)
         return decoded_out
 
+    def _loss(self, out: torch.Tensor, labels: list[list[str]], vocab2idx, max_seq_len, device) -> torch.Tensor:
+        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
+        return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
 if __name__=="__main__":
     model = TripletClassifier(224,10)

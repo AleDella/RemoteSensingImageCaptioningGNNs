@@ -118,7 +118,7 @@ def decode_output(out, idx2word):
     Function that decodes the network's output into the actual captions
     '''
     ids = []
-    sentences = [[] for i in range(out[0].size(0))]
+    sentences = [[] for _ in range(out[0].size(0))]
     for tok in out:
         ids.append([argmax(emb.detach().numpy()) for emb in tok])
     for tok in ids:
@@ -126,3 +126,16 @@ def decode_output(out, idx2word):
             sentences[i].append(idx2word[id])
             
     return sentences
+
+def encode_caption(caption, word2idx):
+    '''
+    Function that encodes the captions and return a tensor
+    '''
+    sentences = []
+    for captions in caption:
+        tmp = []
+        for sent in captions:
+            tmp.append([word2idx[t] for t in sent])
+        sentences.append(tmp)
+
+    return torch.Tensor(sentences)

@@ -63,12 +63,7 @@ class UCMTriplets(Dataset):
         word_id = 2
         for anno in readfile(caption_path):
             id = int(anno.split(" ")[:1][0])
-            # sentence = anno.replace(' \n', '')[2:]
             sentence = anno.replace(' \n', '').split(" ")[1:]
-            try:
-                self.captions[id].append(sentence)
-            except:
-                self.captions[id] = [sentence]
             if len(sentence)>self.max_capt_length:
                 self.max_capt_length = len(sentence)
             # Word2idx part
@@ -76,7 +71,18 @@ class UCMTriplets(Dataset):
                 if token not in list(self.word2idx.keys()):
                     self.word2idx[token] = word_id
                     word_id+=1
-        
+        for anno in readfile(caption_path):
+            id = int(anno.split(" ")[:1][0])
+            sentence = anno.replace(' \n', '').split(" ")[1:]
+            while len(sentence)<self.max_capt_length:
+                sentence.append("__EOS__")
+            try:
+                self.captions[id].append(sentence)
+            except:
+                self.captions[id] = [sentence]
+            
+
+
         self.node_feats = {}
         self.num_nodes = {}
         self.rel_feats = {}
@@ -197,7 +203,7 @@ def collate_fn_captions(data):
     for i, elem in enumerate(node_feats):
         new_feats[i] = elem
     
-    return {'captions': [d['captions'] for d in data], 'src_ids': src_ids, 'dst_ids': dst_ids, 'node_feats': new_feats, 'num_nodes': num_nodes}
+    return [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
             
 
 

@@ -7,3 +7,4 @@ tripletsRSICD.json
 
 model_finetuned.pth
 model.pth
+*.pth
