@@ -60,7 +60,7 @@ class CaptionGenerator(nn.Module):
         decoded_out = self.decoder(g, graph_feats, labels)
         return decoded_out
 
-    def _loss(self, out: torch.Tensor, labels: list[list[str]], vocab2idx, max_seq_len, device) -> torch.Tensor:
+    def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
