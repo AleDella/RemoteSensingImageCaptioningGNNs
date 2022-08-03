@@ -29,6 +29,16 @@ class UCMTriplets(Dataset):
             split: define if its train, val or test split
             classification: if True, use triplet2idx and idx2triplet
         '''
+        # JSON read for NLP part
+        f = open(triplets_path)
+        full_data = json.load(f)
+        f.close()
+        if split is None:
+            # Discard IDs that have no scene graph for caption
+            caption_tripl, discarded_ids = polish_triplets(full_data)
+        else:
+            # Discard IDs that have no scene graph for caption
+            caption_tripl, discarded_ids = polish_triplets(full_data[split])
         # Save return keys
         self.return_keys = return_keys
         # IMG read for CV part
@@ -36,13 +46,12 @@ class UCMTriplets(Dataset):
         self.images = {}
         for file in files:
             id = int(file.split('.')[0])
-            path = image_folder + file.replace('\n', '')
-            img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
-            self.images[id] = torch.from_numpy(img.copy())
-        # JSON read for NLP part
-        f = open(triplets_path)
-        full_data = json.load(f)
-        f.close()
+            if str(id) not in discarded_ids:
+                path = image_folder + file.replace('\n', '')
+                img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
+                self.images[id] = torch.from_numpy(img.copy())
+        
+        # Here must add the ID filtering
         
         # FOR TRIPLET CLASSIFICATION
         if classification: 
@@ -50,9 +59,9 @@ class UCMTriplets(Dataset):
             self.triplet_to_idx = full_data['Triplet_to_idx']
         
         if split is None:
-            self.triplets = full_data
+            self.triplets = {id:value for (id,value) in full_data.items() if id not in discarded_ids}
         else:
-            self.triplets = full_data[split]
+            self.triplets = {id:value for (id,value) in full_data[split].items() if id not in discarded_ids}
 
         self.captions = {}
         # GLOBAL word2idx for the LSTM decoder
@@ -63,69 +72,72 @@ class UCMTriplets(Dataset):
         word_id = 2
         for anno in readfile(caption_path):
             id = int(anno.split(" ")[:1][0])
-            sentence = anno.replace(' \n', '').split(" ")[1:]
-            if len(sentence)>self.max_capt_length:
-                self.max_capt_length = len(sentence)
-            # Word2idx part
-            for token in sentence:
-                if token not in list(self.word2idx.keys()):
-                    self.word2idx[token] = word_id
-                    word_id+=1
+            if str(id) not in discarded_ids:
+                sentence = anno.replace(' \n', '').split(" ")[1:]
+                if len(sentence)>self.max_capt_length:
+                    self.max_capt_length = len(sentence)
+                # Word2idx part
+                for token in sentence:
+                    if token not in list(self.word2idx.keys()):
+                        self.word2idx[token] = word_id
+                        word_id+=1
         for anno in readfile(caption_path):
             id = int(anno.split(" ")[:1][0])
-            sentence = anno.replace(' \n', '').split(" ")[1:]
-            while len(sentence)<self.max_capt_length:
-                sentence.append("__EOS__")
-            try:
-                self.captions[id].append(sentence)
-            except:
-                self.captions[id] = [sentence]
-            
+            if str(id) not in discarded_ids:
+                sentence = anno.replace(' \n', '').split(" ")[1:]
+                while len(sentence)<self.max_capt_length:
+                    sentence.append("__EOS__")
+                try:
+                    self.captions[id].append(sentence)
+                except:
+                    self.captions[id] = [sentence]
+                
 
 
         self.node_feats = {}
         self.num_nodes = {}
-        self.rel_feats = {}
         self.src_ids = {}
         self.dst_ids = {}
         f_split = {}
-        caption_tripl = polish_triplets(self.triplets)
+        # Discard IDs that have no scene graph for caption
+        caption_tripl, discarded_ids = polish_triplets(self.triplets)
         # Here to check what happen when split is not passed
         for id in caption_tripl:
-            f_tripl = []
-            tmp_dict = {}
-            tmp_id = 0
-            src_ids = []
-            dst_ids = []
-            node_feats = []
-            # Extract features from triplets
-            for i, tripl in enumerate(caption_tripl[id]):
-                encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
-                output = model(**encoded_input)
-                f_tripl.append(output.pooler_output)
-                if tripl[0] not in list(tmp_dict.keys()):
-                    tmp_dict[tripl[0]]=tmp_id
-                    tmp_id+=1
-                    node_feats.append(list(output.pooler_output[0]))
-                if tripl[1] not in list(tmp_dict.keys()):
-                    tmp_dict[tripl[1]]=tmp_id
-                    tmp_id+=1
-                    node_feats.append(list(output.pooler_output[1]))
-                if tripl[2] not in list(tmp_dict.keys()):
-                    tmp_dict[tripl[2]]=tmp_id
-                    tmp_id+=1
-                    node_feats.append(list(output.pooler_output[2]))
-                
-                # Create source and destination lists
-                src_ids.append(tmp_dict[tripl[0]])
-                dst_ids.append(tmp_dict[tripl[1]])
-                src_ids.append(tmp_dict[tripl[1]])
-                dst_ids.append(tmp_dict[tripl[2]])
-            self.src_ids[id] = src_ids
-            self.dst_ids[id] = dst_ids
-            self.node_feats[id] = torch.Tensor(node_feats)
-            self.num_nodes[id] = len(node_feats)
-            f_split[id] = f_tripl
+            if id not in discarded_ids:
+                f_tripl = []
+                tmp_dict = {}
+                tmp_id = 0
+                src_ids = []
+                dst_ids = []
+                node_feats = []
+                # Extract features from triplets
+                for i, tripl in enumerate(caption_tripl[id]):
+                    encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
+                    output = model(**encoded_input)
+                    f_tripl.append(output.pooler_output)
+                    if tripl[0] not in list(tmp_dict.keys()):
+                        tmp_dict[tripl[0]]=tmp_id
+                        tmp_id+=1
+                        node_feats.append(list(output.pooler_output[0]))
+                    if tripl[1] not in list(tmp_dict.keys()):
+                        tmp_dict[tripl[1]]=tmp_id
+                        tmp_id+=1
+                        node_feats.append(list(output.pooler_output[1]))
+                    if tripl[2] not in list(tmp_dict.keys()):
+                        tmp_dict[tripl[2]]=tmp_id
+                        tmp_id+=1
+                        node_feats.append(list(output.pooler_output[2]))
+                    
+                    # Create source and destination lists
+                    src_ids.append(tmp_dict[tripl[0]])
+                    dst_ids.append(tmp_dict[tripl[1]])
+                    src_ids.append(tmp_dict[tripl[1]])
+                    dst_ids.append(tmp_dict[tripl[2]])
+                self.src_ids[id] = src_ids
+                self.dst_ids[id] = dst_ids
+                self.node_feats[id] = torch.Tensor(node_feats)
+                self.num_nodes[id] = len(node_feats)
+                f_split[id] = f_tripl
         self.features = f_split
         
     
@@ -138,8 +150,13 @@ class UCMTriplets(Dataset):
             index = index.tolist()
         # Get the image ID
         id = list(self.triplets.keys())[index]
-        
-        sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+        try:
+            sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+        except:
+            sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+        #     print("\nSmth wrong")
+        #     print("Problematic ID: ", id)
+        #     exit(0)
         # sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
@@ -194,7 +211,11 @@ def collate_fn_captions(data):
             dst_ids[i].append(0)
         # Add random node feats to fix lengths
         if node_feats[i].size(0)<max_nodes:
-            new_node_feats = torch.zeros((node_feats[i].size(0)+(max_nodes-node_feats[i].size(0)), node_feats[i].size(1)))
+            try:
+                new_node_feats = torch.zeros((node_feats[i].size(0)+(max_nodes-node_feats[i].size(0)), node_feats[i].size(1)))
+            except:
+                print("Len: {}\tSize: {}\t ID: {}\n".format(len(node_feats), node_feats[i].size(), node_feats))
+                exit(0)
             for j in range(node_feats[i].size(0)):
                 new_node_feats[j] = node_feats[i][j]
             node_feats[i] = new_node_feats

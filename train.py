@@ -140,8 +140,9 @@ class caption_trainer():
     
     def fit(self, epochs, learning_rate, batch_size, criterion):
         # Define dataloader
-        trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=False, collate_fn=self.collate_fn)
-        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
+        trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=True, collate_fn=self.collate_fn)
+        if self.dataset_val!='':
+            valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=self.collate_fn)
         # Define the optimizer
         optimizer = optim.SGD(self.model.parameters(), lr=learning_rate)
         
@@ -175,7 +176,8 @@ class caption_trainer():
                         epoch_loss_val+=loss.item()
                     
             print('Training loss: {:.3f}'.format(epoch_loss_train/i))
-            print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+            if self.dataset_val!='':
+                print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
         
         torch.save(self.model,self.save_path)
     

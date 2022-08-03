@@ -148,12 +148,20 @@ def polish_triplets(triplets):
     Function that deletes double triplets and eliminates sentence division
     '''
     new_tripl = {}
+    discarded_ids = []
     for id in triplets:
         final_tripl = []
         for sentence in triplets[id]:
-            for tripl in sentence:
-                if tripl not in final_tripl:
-                    final_tripl.append(tripl)
-        new_tripl[id] = final_tripl
+            if sentence == []:
+                # print(id)
+                continue
+            else:
+                for tripl in sentence:
+                    if tripl not in final_tripl:
+                        final_tripl.append(tripl)
+        if final_tripl == []:
+            discarded_ids.append(id)
+        else:
+            new_tripl[id] = final_tripl
     
-    return new_tripl
+    return new_tripl, discarded_ids
