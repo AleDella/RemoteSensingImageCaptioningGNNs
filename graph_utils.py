@@ -120,10 +120,12 @@ def decode_output(out, idx2word):
     ids = []
     sentences = [[] for _ in range(out[0].size(0))]
     for tok in out:
-        ids.append([argmax(emb.detach().numpy()) for emb in tok])
+        ids.append([argmax(emb.cpu().detach().numpy()) for emb in tok])
     for tok in ids:
         for i, id in enumerate(tok):
-            sentences[i].append(idx2word[id])
+            # Remove padding
+            if idx2word[id] != '__EOS__':
+                sentences[i].append(idx2word[id])
             
     return sentences
 

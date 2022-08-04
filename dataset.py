@@ -201,6 +201,7 @@ def collate_fn_captions(data):
     dst_ids = [d['dst_ids'] for d in data]
     node_feats = [d['node_feats'] for d in data]
     num_nodes = [d['num_nodes'] for d in data]
+    ids = [d['imgid'] for d in data]
     max_rel = len(max(src_ids, key=len))
     max_nodes = max(num_nodes)
     # ID
@@ -224,7 +225,7 @@ def collate_fn_captions(data):
     for i, elem in enumerate(node_feats):
         new_feats[i] = elem
     
-    return [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
+    return ids, [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
             
 
 
