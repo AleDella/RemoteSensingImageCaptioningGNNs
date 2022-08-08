@@ -3,7 +3,6 @@ from torch.utils.data import Dataset
 import json
 from transformers import BertTokenizer, BertModel
 import cv2
-from graph_utils import polish_triplets
 
 
 # Util function cpied by extract_triplets
@@ -16,7 +15,7 @@ class UCMTriplets(Dataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
-    def __init__(self, image_folder, image_filenames, triplets_path, caption_path, model, tokenizer, return_keys, split=None, classification=False):
+    def __init__(self, image_folder, image_filenames, triplets_path, polished_tripl_path, caption_path, word2idx_path, model, tokenizer, return_keys, split=None):
         '''
         Args:
             image_folder: path to the folder with all the images
@@ -29,16 +28,12 @@ class UCMTriplets(Dataset):
             split: define if its train, val or test split
             classification: if True, use triplet2idx and idx2triplet
         '''
-        # JSON read for NLP part
-        f = open(triplets_path)
-        full_data = json.load(f)
+        # Polished triplets parts
+        f = open(polished_tripl_path)
+        polished_data = json.load(f)
         f.close()
-        if split is None:
-            # Discard IDs that have no scene graph for caption
-            caption_tripl, discarded_ids = polish_triplets(full_data)
-        else:
-            # Discard IDs that have no scene graph for caption
-            caption_tripl, discarded_ids = polish_triplets(full_data[split])
+        # Added tripl filtering so no split needed
+        caption_tripl, discarded_ids = polished_data['tripl'], polished_data['discarded_ids']
         # Save return keys
         self.return_keys = return_keys
         # IMG read for CV part
@@ -51,42 +46,36 @@ class UCMTriplets(Dataset):
                 img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
                 self.images[id] = torch.from_numpy(img.copy())
         
-        # Here must add the ID filtering
-        
+        # Part using the full triplet file
+        f = open(triplets_path)
+        unpolished_data = json.load(f)
+        f.close()
         # FOR TRIPLET CLASSIFICATION
-        if classification: 
-            self.unique_triplets = len(full_data['Triplet_to_idx'])
-            self.triplet_to_idx = full_data['Triplet_to_idx']
-        
+        self.triplet_to_idx = unpolished_data['Triplet_to_idx']
         if split is None:
-            self.triplets = {id:value for (id,value) in full_data.items() if id not in discarded_ids}
+            self.triplets = {id:value for (id,value) in unpolished_data.items() if id not in discarded_ids}
         else:
-            self.triplets = {id:value for (id,value) in full_data[split].items() if id not in discarded_ids}
+            self.triplets = {id:value for (id,value) in unpolished_data[split].items() if id not in discarded_ids}
 
         self.captions = {}
-        # GLOBAL word2idx for the LSTM decoder
-        self.word2idx = {}
+        # Upload the word2idx file
+        f = open(word2idx_path)
+        self.word2idx=json.load(f)
+        f.close()
+        
         self.max_capt_length = 0
-        self.word2idx["__UNK__"] = 0
-        self.word2idx["__EOS__"] = 1
-        word_id = 2
         for anno in readfile(caption_path):
             id = int(anno.split(" ")[:1][0])
             if str(id) not in discarded_ids:
                 sentence = anno.replace(' \n', '').split(" ")[1:]
+                # Add to the captions starting and ending tokens
+                sentence.insert(0, "<sos>")
+                sentence.append("<eos>")
+                tmp = []
+                for tok in sentence:
+                    tmp.append(self.word2idx[tok])
                 if len(sentence)>self.max_capt_length:
-                    self.max_capt_length = len(sentence)
-                # Word2idx part
-                for token in sentence:
-                    if token not in list(self.word2idx.keys()):
-                        self.word2idx[token] = word_id
-                        word_id+=1
-        for anno in readfile(caption_path):
-            id = int(anno.split(" ")[:1][0])
-            if str(id) not in discarded_ids:
-                sentence = anno.replace(' \n', '').split(" ")[1:]
-                while len(sentence)<self.max_capt_length:
-                    sentence.append("__EOS__")
+                        self.max_capt_length = len(sentence)
                 try:
                     self.captions[id].append(sentence)
                 except:
@@ -99,8 +88,6 @@ class UCMTriplets(Dataset):
         self.src_ids = {}
         self.dst_ids = {}
         f_split = {}
-        # Discard IDs that have no scene graph for caption
-        caption_tripl, discarded_ids = polish_triplets(self.triplets)
         # Here to check what happen when split is not passed
         for id in caption_tripl:
             if id not in discarded_ids:
@@ -138,7 +125,6 @@ class UCMTriplets(Dataset):
                 self.node_feats[id] = torch.Tensor(node_feats)
                 self.num_nodes[id] = len(node_feats)
                 f_split[id] = f_tripl
-        self.features = f_split
         
     
     def __len__(self):
@@ -193,7 +179,7 @@ def collate_fn_classifier(data, triplet_to_idx):
     return images, triplets_tensor
 
 
-def collate_fn_captions(data):
+def collate_fn_captions(data, word2idx):
     '''
     Collate function for the graph to caption
     '''
@@ -201,7 +187,6 @@ def collate_fn_captions(data):
     dst_ids = [d['dst_ids'] for d in data]
     node_feats = [d['node_feats'] for d in data]
     num_nodes = [d['num_nodes'] for d in data]
-    ids = [d['imgid'] for d in data]
     max_rel = len(max(src_ids, key=len))
     max_nodes = max(num_nodes)
     # ID
@@ -225,7 +210,16 @@ def collate_fn_captions(data):
     for i, elem in enumerate(node_feats):
         new_feats[i] = elem
     
-    return ids, [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
+    # Create the captions tensor
+    new_cap_ids = []
+    for d in data:
+        for cap in d['captions']:
+            tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
+            new_cap_ids.append(torch.tensor(tmp))
+    ###########################
+    # print("New caps ids: ", new_cap_ids)
+    # return [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
+    return [d['imgid'] for d in data], [d['captions'] for d in data], torch.nn.utils.rnn.pad_sequence(new_cap_ids, batch_first=True, padding_value=word2idx['<pad>']), src_ids, dst_ids, new_feats, num_nodes
             
 
 
