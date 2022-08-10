@@ -113,7 +113,7 @@ def get_node_features(features, num_nodes):
     return new_feats
             
             
-def decode_output(out, idx2word):
+def decode_output(out, idx2word, caption_lengths):
     '''
     Function that decodes the network's output into the actual captions
     '''
@@ -123,10 +123,10 @@ def decode_output(out, idx2word):
         ids.append([argmax(emb.cpu().detach().numpy()) for emb in tok])
     for tok in ids:
         for i, id in enumerate(tok):
-            # Remove padding
-            if idx2word[id] != '__EOS__':
-                sentences[i].append(idx2word[id])
-            
+            sentences[i].append(idx2word[id])
+    
+    sentences = [sent[:len[0]] for sent, len in zip(sentences, caption_lengths)]
+    
     return sentences
 
 def encode_caption(caption, word2idx):
@@ -167,3 +167,31 @@ def polish_triplets(triplets):
             new_tripl[id] = final_tripl
     
     return new_tripl, discarded_ids
+
+
+def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
+    '''
+    Function that pads the sequences of ids using pytorch pad functions
+    
+    Args:
+        captions List[List[int]]: list of id-coded captions
+        pad_id int: id corresponding to the pad token
+        
+    Return:
+        res torch.Tensor: padded sequences 
+    '''
+    res = []
+    for sample in captions:
+        if training:
+            index = torch.randperm(len(sample))[:1]
+            res.append(torch.tensor(sample[index]))
+        else:
+            tmp = []
+            for cap in sample:
+                cap = torch.tensor(cap)
+                print(cap.shape)
+                tmp.append(torch.tensor(cap[:, index]).reshape((sample.size(0))))
+                
+            res.append(torch.nn.utils.rnn.pad_sequence(tmp, padding_value=pad_id)) # (max_len, number_captions)
+
+    return torch.nn.utils.rnn.pad_sequence(res, batch_first=True, padding_value=pad_id) # (batch_size, max_len, number_captions) if training; else (batch_size, max_len)
