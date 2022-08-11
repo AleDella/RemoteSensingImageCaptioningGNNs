@@ -189,7 +189,7 @@ def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
             tmp = []
             for cap in sample:
                 cap = torch.tensor(cap)
-                print(cap.shape)
+                index = torch.randperm(len(sample))[:1]
                 tmp.append(torch.tensor(cap[:, index]).reshape((sample.size(0))))
                 
             res.append(torch.nn.utils.rnn.pad_sequence(tmp, padding_value=pad_id)) # (max_len, number_captions)

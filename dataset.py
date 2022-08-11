@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import json
 from transformers import BertTokenizer, BertModel
 import cv2
+from graph_utils import pad_encodings
 
 
 # Util function cpied by extract_triplets
@@ -140,10 +141,6 @@ class UCMTriplets(Dataset):
             sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
         except:
             sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
-        #     print("\nSmth wrong")
-        #     print("Problematic ID: ", id)
-        #     exit(0)
-        # sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
         
@@ -168,18 +165,11 @@ def collate_fn_classifier(data, triplet_to_idx):
     for image_triplet in triplets[0]:
         for triplet in image_triplet:
             triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
-
-    #     indices = torch.nonzero(triplets_tensor[0,:])
-    #     print(indices)
-    #     for index in indices:
-    #         print([key for key in triplet_to_idx.keys() if triplet_to_idx[key]==index])
-        
-    # print(triplets[0])
     
     return images, triplets_tensor
 
 
-def collate_fn_captions(data, word2idx):
+def collate_fn_captions(data, word2idx, training):
     '''
     Collate function for the graph to caption
     '''
@@ -213,13 +203,13 @@ def collate_fn_captions(data, word2idx):
     # Create the captions tensor
     new_cap_ids = []
     for d in data:
+        smth = []
         for cap in d['captions']:
             tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
-            new_cap_ids.append(torch.tensor(tmp))
-    ###########################
-    # print("New caps ids: ", new_cap_ids)
-    # return [d['captions'] for d in data], src_ids, dst_ids, new_feats, num_nodes
-    return [d['imgid'] for d in data], [d['captions'] for d in data], torch.nn.utils.rnn.pad_sequence(new_cap_ids, batch_first=True, padding_value=word2idx['<pad>']), src_ids, dst_ids, new_feats, num_nodes
+            smth.append(tmp)
+        new_cap_ids.append(smth)
+
+    return [d['imgid'] for d in data], [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
             
 
 
