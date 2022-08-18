@@ -29,7 +29,7 @@ if val_dataset.max_capt_length>max:
 
 model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder='linear')
 trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, 'GNN.pth')
-trainer.fit(20, 0.001, 8, model._loss, early_stopping=True)
+trainer.fit(10, 0.0001, 8, model._loss, early_stopping=True, tol_threshold=1)
 
 # # # Load old model
 # test_dataset = UCMTriplets(img_path, test_filenames, tripl_path, tripl_path_test, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='test')

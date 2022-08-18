@@ -221,10 +221,11 @@ class caption_trainer():
             if self.dataset_val!='':
                 print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
             if early_stopping:
-                if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) :
+                if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) and tollerance<tol_threshold :
                     val_max = epoch_loss_val/j
                     train_max = epoch_loss_train/i
                     best_model=self.model
+                    # print("Stopped training due to overfit")
                 else:
                     tollerance+=1
                     if tollerance>tol_threshold:
@@ -232,7 +233,11 @@ class caption_trainer():
                         break
                     # Restart from the best checkpoint
                     self.model = best_model
-        torch.save(best_model,self.save_path)
+        
+        if early_stopping:
+            torch.save(best_model,self.save_path)
+        else:
+            torch.save(self.model,self.save_path)
     
     # def finetune(self, model, epochs, learning_rate, batch_size):
     #     self.model = model
