@@ -19,17 +19,17 @@ model = BertModel.from_pretrained("bert-base-uncased")
 # return_k = ['src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 
-# train_dataset = UCMTriplets(img_path, train_filenames, tripl_path, tripl_path_train, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='train')
-# val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='val')
-# feats_n = train_dataset.node_feats['1'][0].size(0)
-# max = train_dataset.max_capt_length
-# if val_dataset.max_capt_length>max:
-#     max = val_dataset.max_capt_length
+train_dataset = UCMTriplets(img_path, train_filenames, tripl_path, tripl_path_train, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='train')
+val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='val')
+feats_n = train_dataset.node_feats['1'][0].size(0)
+max = train_dataset.max_capt_length
+if val_dataset.max_capt_length>max:
+    max = val_dataset.max_capt_length
 
 
-# model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder='linear')
-# trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, 'GNN.pth')
-# trainer.fit(20, 0.001, 8, model._loss, early_stopping=True)
+model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder='linear')
+trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, 'GNN.pth')
+trainer.fit(20, 0.001, 8, model._loss, early_stopping=True)
 
 # # # Load old model
 # test_dataset = UCMTriplets(img_path, test_filenames, tripl_path, tripl_path_test, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='test')
