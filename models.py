@@ -47,11 +47,16 @@ class CaptionGenerator(nn.Module):
         max_seq_len: maximum tokens in a caption
         vocab2idx: dictionary for one hot encoding of tokens
     '''
-    def __init__(self, feats_dim, max_seq_len, vocab2idx) -> None:
+    def __init__(self, feats_dim, max_seq_len, vocab2idx, decoder='lstm') -> None:
         super(CaptionGenerator, self).__init__()
         self.encoder = GNN(feats_dim)
-        self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
-        # self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 3)
+        self.decoder_type = decoder
+        if self.decoder_type == 'linear':
+            self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
+        if self.decoder_type == 'lstm':
+            self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
+        if self.decoder_type == 'rnn':
+            self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 3)
         self.dropout = nn.Dropout(p=0.3)
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
@@ -59,12 +64,19 @@ class CaptionGenerator(nn.Module):
     def forward(self, g, feats, labels):
         graph_feats = self.dropout(self.encoder(g, feats))
         # graph_feats = graph_feats.unsqueeze(1)
-        decoded_out = self.decoder(g, graph_feats, labels)
-        # decoded_out = self.decoder(graph_feats, labels)
+        
+        if self.decoder_type == 'linear':
+            decoded_out = [d(graph_feats) for d in self.decoder]
+        if self.decoder_type == 'lstm':
+            decoded_out = self.decoder(g, graph_feats, labels)
+        if self.decoder_type == 'rnn':
+            decoded_out = self.decoder(graph_feats, labels)
         return decoded_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
+        # print(out[0].shape)
+        # print(len(out))
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
 # Normal decoder

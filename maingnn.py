@@ -19,17 +19,17 @@ model = BertModel.from_pretrained("bert-base-uncased")
 # return_k = ['src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 
-train_dataset = UCMTriplets(img_path, train_filenames, tripl_path, tripl_path_train, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='train')
-val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='val')
-feats_n = train_dataset.node_feats['1'][0].size(0)
-max = train_dataset.max_capt_length
-if val_dataset.max_capt_length>max:
-    max = val_dataset.max_capt_length
+# train_dataset = UCMTriplets(img_path, train_filenames, tripl_path, tripl_path_train, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='train')
+# val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='val')
+# feats_n = train_dataset.node_feats['1'][0].size(0)
+# max = train_dataset.max_capt_length
+# if val_dataset.max_capt_length>max:
+#     max = val_dataset.max_capt_length
 
 
-model = CaptionGenerator(feats_n, max, train_dataset.word2idx)
-trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, 'GNN.pth')
-trainer.fit(10, 0.001, 8, model._loss, early_stopping=True)
+# model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder='linear')
+# trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, 'GNN.pth')
+# trainer.fit(20, 0.001, 8, model._loss, early_stopping=True)
 
 # # # Load old model
 # test_dataset = UCMTriplets(img_path, test_filenames, tripl_path, tripl_path_test, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='test')
@@ -44,23 +44,24 @@ trainer.fit(10, 0.001, 8, model._loss, early_stopping=True)
 # import dgl
 # from graph_utils import decode_output, get_node_features
 # import json
-# testloader = DataLoader(test_dataset,batch_size=2,shuffle=False,collate_fn=partial(collate_fn_captions, word2idx=test_dataset.word2idx, training=True))
+# testloader = DataLoader(test_dataset,batch_size=1,shuffle=False,collate_fn=partial(collate_fn_captions, word2idx=test_dataset.word2idx, training=True))
 # model = model.to('cuda')
 # idx2word = {v: k for k, v in test_dataset.word2idx.items()}
 # with torch.no_grad():
 #     model.eval()
 #     result = {}
 #     for _, data in enumerate(tqdm(testloader)):
-#         _, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
+#         ids, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
 #         graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to('cuda')
 #         feats = get_node_features(node_feats, sum(num_nodes)).to('cuda')
 #         outputs = model(graphs, feats, encoded_captions)
-#         print("Out info: {} {}\n".format(outputs[0].shape, len(outputs)))
-#         decoded_outputs = decode_output(outputs, idx2word)
-#         # for i, id in enumerate(ids):
-#         #     result[id] = decoded_outputs[i]
+#         # print("Out info: {} {}\n".format(len(outputs), outputs[0].shape))
+#         # print("Dictionary length: ", len(test_dataset.word2idx))
+#         decoded_outputs = decode_output(outputs, idx2word, [])
+#         for i, id in enumerate(ids):
+#             result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
-# with open("captions.json", "w") as outfile:
+# with open("captions_linear.json", "w") as outfile:
 #     json.dump(result, outfile)
 
 

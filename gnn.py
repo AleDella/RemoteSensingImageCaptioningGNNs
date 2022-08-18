@@ -107,7 +107,7 @@ class LSTMDecoder(nn.Module):
             max = true_emb.size(1)
         else:
             max = pred_emb.size(1)
-        for i in range(max):
+        for i in range(max-1):
             # print("HT: {}\tFeats: {}\tTrue Emb: {}\tPred Emb: {}\tMax seq len: {}\t i: {}\n".format(h_t.shape, feats.shape, true_emb.shape, pred_emb.shape, self._max_seq_len, i))
             if self.training:
                 _in = true_emb[:, i]

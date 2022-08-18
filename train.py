@@ -138,7 +138,7 @@ class caption_trainer():
             device = torch.device("cuda:0")
         self.device = device
     
-    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=3):
+    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=5):
         # Define dataloader
         trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=True, collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
         if self.dataset_val!='':
@@ -150,6 +150,7 @@ class caption_trainer():
             self.model = self.model.to(self.device)
         if early_stopping:
             val_max = float('inf')
+            train_max = float('inf')
             tollerance = 0
         for epoch in range(epochs):
             self.model.train()
@@ -160,8 +161,16 @@ class caption_trainer():
                 _, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
                 graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
                 feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
+                # print("Graph: ", graphs)
+                # print("Feats: ", feats.shape)
+                # try:
+                #     print("Captions: ", encoded_captions.shape)
+                # except:
+                #     print("Captions: ", encoded_captions[0].shape)
                 outputs = self.model(graphs, feats, encoded_captions)
-                
+                # print("Outputs len: ", len(outputs))
+                # print("Train outputs: ", outputs[0].shape)
+                # exit(0)
                 optimizer.zero_grad()
                 
                 
@@ -197,6 +206,8 @@ class caption_trainer():
                         graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
                         feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
                         outputs = self.model(graphs, feats, encoded_captions)
+                        # print("Val outputs: ", outputs[0].shape)
+                        # exit(0)
                         loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                         # loss = 0
                         # for caption in captions:
@@ -210,14 +221,15 @@ class caption_trainer():
             if self.dataset_val!='':
                 print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
             if early_stopping:
-                if (epoch_loss_val/j) < val_max:
+                if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) :
                     val_max = epoch_loss_val/j
+                    train_max = epoch_loss_train/i
                     best_model=self.model
                 else:
                     tollerance+=1
-                    # if tollerance>tol_threshold:
-                    #     print("Stopped training due to overfit")
-                    #     break
+                    if tollerance>tol_threshold:
+                        print("Stopped training due to overfit")
+                        break
                     # Restart from the best checkpoint
                     self.model = best_model
         torch.save(best_model,self.save_path)

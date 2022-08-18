@@ -117,15 +117,18 @@ def decode_output(out, idx2word, caption_lengths):
     '''
     Function that decodes the network's output into the actual captions
     '''
-    ids = []
     sentences = [[] for _ in range(out[0].size(0))]
-    for tok in out:
-        ids.append([argmax(emb.cpu().detach().numpy()) for emb in tok])
-    for tok in ids:
-        for i, id in enumerate(tok):
-            sentences[i].append(idx2word[id])
+    for toks in out:
+        for i, sample in enumerate(toks):
+            sentences[i].append(argmax(sample.cpu().detach().numpy()))
     
-    sentences = [sent[:len[0]] for sent, len in zip(sentences, caption_lengths)]
+    for j, sent in enumerate(sentences):
+        for i, id in enumerate(sent):
+            sentences[j][i] = idx2word[id]
+    try:
+        sentences = [sent[:sent.index('<eos>')+1] for sent in sentences]
+    except:
+        sentences = [sent[:sent.index('<pad>')] for sent in sentences]
     
     return sentences
 
