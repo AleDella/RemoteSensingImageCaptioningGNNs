@@ -4,6 +4,7 @@ import json
 from transformers import BertTokenizer, BertModel
 import cv2
 from graph_utils import pad_encodings
+import os
 
 
 # Util function cpied by extract_triplets
@@ -22,12 +23,13 @@ class UCMTriplets(Dataset):
             image_folder: path to the folder with all the images
             image_filenames: path to the file with all the filenames
             triplets_path: path to the JSON containing the triplets
+            polished_triplets_path: path to the JSON containing only unique triplets
             caption_path: path to the TXT containing the captions
+            word2idx_path: path to the JSON containing the word2idx dictionary
             model: model used to produce the features for the tokens
             tokenizer: tokenizer used to extract ids from the tokens
             return_keys: list of keys to return in the sample
             split: define if its train, val or test split
-            classification: if True, use triplet2idx and idx2triplet
         '''
         # Polished triplets parts
         f = open(polished_tripl_path)
@@ -88,7 +90,6 @@ class UCMTriplets(Dataset):
         self.num_nodes = {}
         self.src_ids = {}
         self.dst_ids = {}
-        f_split = {}
         # Here to check what happen when split is not passed
         for id in caption_tripl:
             if id not in discarded_ids:
@@ -125,7 +126,6 @@ class UCMTriplets(Dataset):
                 self.dst_ids[id] = dst_ids
                 self.node_feats[id] = torch.Tensor(node_feats)
                 self.num_nodes[id] = len(node_feats)
-                f_split[id] = f_tripl
         
     
     def __len__(self):
@@ -211,10 +211,116 @@ def collate_fn_captions(data, word2idx, training):
 
     return [d['imgid'] for d in data], [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
             
+### WIP
+# Class for the RSICD dataset
+class RSICDDataset(Dataset):
+    
+    def __init__(self, image_folder, graph_path, polished_tripl_path, annotation_path, word2idx_path, model, tokenizer, return_keys, split=None) -> None:
+        # Polished triplets parts
+        f = open(polished_tripl_path, 'r')
+        polished_data = json.load(f)
+        f.close()
+        self.triplets = polished_data[split]
+        # Save the selected keys
+        self.return_keys = return_keys
+        # Save annotations
+        f = open(annotation_path, 'r')
+        self.annotations = json.load(f)['images']
+        f.close()
+        # IMG read for CV part
+        self.images = {}
+        for anno in self.annotations:
+            # Check for images that have triplets and are of the desired split
+            if anno['split']==split:
+                path = image_folder +"/" + anno['filename']
+                # print("Path: ", path)
+                img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
+                self.images[anno['imgid']] = torch.from_numpy(img.copy())
+        # Upload the word2idx file
+        f = open(word2idx_path)
+        self.word2idx=json.load(f)
+        f.close()
+        # Captions part
+        self.captions = {}
+        self.max_capt_length = 0
+        for anno in self.annotations:
+            if anno['split']==split:
+                for sent in anno['sentences']:
+                    # sentence = sent[''].replace(' \n', '').split(" ") # sent['tokens']
+                    # Add to the captions starting and ending tokens
+                    sentence = sent['tokens']
+                    sentence.insert(0, "<sos>")
+                    sentence.append("<eos>")
+                    tmp = []
+                    for tok in sentence:
+                        tmp.append(self.word2idx[tok])
+                    if len(sentence)>self.max_capt_length:
+                            self.max_capt_length = len(sentence)
+                    try:
+                        self.captions[anno['imgid']].append(sentence)
+                    except:
+                        self.captions[anno['imgid']] = [sentence]
+        # # Graph data part
+        # Modify this part to accept files for the 4 things dependent on the split
+        self.node_feats = {}
+        self.num_nodes = {}
+        self.src_ids = {}
+        self.dst_ids = {}
+        # # Here to check what happen when split is not passed
+        # for id in self.triplets:
+        #     f_tripl = []
+        #     tmp_dict = {}
+        #     tmp_id = 0
+        #     src_ids = []
+        #     dst_ids = []
+        #     node_feats = []
+        #     # Extract features from triplets
+        #     for _, tripl in enumerate(self.triplets[id]):
+        #         encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
+        #         output = model(**encoded_input)
+        #         f_tripl.append(output.pooler_output)
+        #         if tripl[0] not in list(tmp_dict.keys()):
+        #             tmp_dict[tripl[0]]=tmp_id
+        #             tmp_id+=1
+        #             node_feats.append(list(output.pooler_output[0]))
+        #         if tripl[1] not in list(tmp_dict.keys()):
+        #             tmp_dict[tripl[1]]=tmp_id
+        #             tmp_id+=1
+        #             node_feats.append(list(output.pooler_output[1]))
+        #         if tripl[2] not in list(tmp_dict.keys()):
+        #             tmp_dict[tripl[2]]=tmp_id
+        #             tmp_id+=1
+        #             node_feats.append(list(output.pooler_output[2]))
+                
+        #         # Create source and destination lists
+        #         src_ids.append(tmp_dict[tripl[0]])
+        #         dst_ids.append(tmp_dict[tripl[1]])
+        #         src_ids.append(tmp_dict[tripl[1]])
+        #         dst_ids.append(tmp_dict[tripl[2]])
+        #     self.src_ids[id] = src_ids
+        #     self.dst_ids[id] = dst_ids
+        #     self.node_feats[id] = torch.Tensor(node_feats)
+        #     self.num_nodes[id] = len(node_feats)
 
 
+    def __len__(self):
+        # Number of samples
+        return len(self.images)  # CHANGED TO IMAGES FOR THE FIRST PART OF THE NETWORK!
 
 
+    def __getitem__(self, index):
+        if torch.is_tensor(index):
+            index = index.tolist()
+        # Get the image ID
+        id = list(self.triplets.keys())[index]
+        try:
+            sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+        except:
+            sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+        # Filter only what is needed 
+        out = { your_key: sample[your_key] for your_key in self.return_keys}
+        
+        return out
 
 # Test code
 if __name__== "__main__":

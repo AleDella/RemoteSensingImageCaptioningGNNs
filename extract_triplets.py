@@ -37,10 +37,9 @@ def rsicd(path_rsicd, json_name):
     anno = json.load(f)
     f.close()
     anno = anno['images']
-    final_file = {'train': {}, 'test': {}, 'val': {}}
+    final_file = {'train': {}, 'test': {}, 'val': {}, 'discarded_images': []}
 
     for img in anno:
-        final_labels = []
         tripl = list(set(extract_ent(img['sentences'])))
         # if tripl not in final_labels:
         #     final_labels.append(tripl)
@@ -48,7 +47,9 @@ def rsicd(path_rsicd, json_name):
             try:
                 final_file[img['split']][img['imgid']].append(tripl)
             except:
-                final_file[img['split']][img['imgid']] = tripl    
+                final_file[img['split']][img['imgid']] = tripl
+        else:
+            final_file['discarded_images'].append(img['filename'])    
 
     with open(json_name, "w") as outfile:
         json.dump(final_file, outfile)
