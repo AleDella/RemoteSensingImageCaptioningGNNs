@@ -245,5 +245,5 @@ if __name__== "__main__":
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     model = BertModel.from_pretrained("bert-base-uncased")
     
-    dataset = UCMTriplets(img_path, filenames, tripl_path, anno_path, model, tokenizer, split='test')
+    dataset = UCMDataset(img_path, filenames, tripl_path, anno_path, model, tokenizer, split='test')
     # # example of dataset sample
