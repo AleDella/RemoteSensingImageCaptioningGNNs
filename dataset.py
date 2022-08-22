@@ -155,14 +155,17 @@ class UCMDataset(TripletDataset):
         # Polished triplets parts
         polished_data = load_json(polished_tripl_path)
         # Added tripl filtering so no split needed
-        _, discarded_ids = polished_data['tripl'], polished_data['discarded_ids']
+        discarded_ids = polished_data['discarded_images']
         # IMG read for CV part
         files = readfile(image_filenames)
         self.images = {}
         for file in files:
             id = int(file.split('.')[0])
             if str(id) not in discarded_ids:
-                path = image_folder + file.replace('\n', '')
+                try:
+                    path = image_folder + file.replace('\n', '')
+                except:
+                    path = image_folder + '/' + file.replace('\n', '')
                 img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
                 self.images[id] = torch.from_numpy(img.copy())
         
@@ -201,7 +204,7 @@ class UCMDataset(TripletDataset):
 # Class for the RSICD dataset
 class RSICDDataset(TripletDataset):
     
-    def __init__(self, image_folder, graph_path, polished_tripl_path, annotation_path, word2idx_path, return_keys, split=None) -> None:
+    def __init__(self, image_folder, graph_path, polished_tripl_path, annotation_path, word2idx_path, return_keys, split='train') -> None:
         '''
         Args:
             image_folder: path to the folder with all the images
@@ -223,7 +226,10 @@ class RSICDDataset(TripletDataset):
         for anno in self.annotations:
             # Check for images that have triplets and are of the desired split
             if anno['split']==split:
-                path = image_folder +"/" + anno['filename']
+                try:
+                    path = image_folder +"/" + anno['filename']
+                except:
+                    path = image_folder + anno['filename']
                 # print("Path: ", path)
                 img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
                 self.images[anno['imgid']] = torch.from_numpy(img.copy())
