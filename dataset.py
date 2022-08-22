@@ -95,6 +95,7 @@ class UCMTriplets(Dataset):
     def __getitem__(self, index):
         if torch.is_tensor(index):
             index = index.tolist()
+        
         # Get the image ID
         id = list(self.triplets.keys())[index]
         try:
