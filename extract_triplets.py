@@ -3,7 +3,7 @@ import sng_parser
 from tqdm import tqdm
 import argparse
 
-parser = argparse.ArgumentParser(description='Process some integers.')
+parser = argparse.ArgumentParser(description="Extract triplets from dataset's captions.")
 parser.add_argument('--dataset', default='ucm', required=True, help='name of the dataset of which you want to create the triplets.')
 
 def extract_ent(sentences):
