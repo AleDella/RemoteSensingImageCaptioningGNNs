@@ -2,6 +2,7 @@ from numpy import argmax
 import sng_parser
 from gensim.models import Word2Vec
 import torch
+import json
 
 def extract_encoding(sentences):
     '''
@@ -198,3 +199,35 @@ def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
             res.append(torch.nn.utils.rnn.pad_sequence(tmp, padding_value=pad_id)) # (max_len, number_captions)
 
     return torch.nn.utils.rnn.pad_sequence(res, batch_first=True, padding_value=pad_id) # (batch_size, max_len, number_captions) if training; else (batch_size, max_len)
+
+def load_json(path):
+    '''
+    Simple function to load a json
+    
+    Args:
+        path: path to the file
+    Return:
+        data: data contained in the file
+    '''
+    f = open(path, 'r')
+    data = json.load(f)
+    f.close()
+    return data
+
+
+def load_graph_data(graph_path, split):
+    '''
+    Function to load all the graph data taken from json format
+    
+    Args:
+        graph_path: path to the folder containing graph data
+        split: string indicating the split we want
+    Return:
+        dst_ids: list of destination nodes for constructing the graph (DGL library)
+        src_ids: list of source nodes for constructing the graph (DGL Library)
+        node_feats: list of node features for each graph
+        num_nodes: list of total number of nodes for each graph
+    '''
+    return load_json(graph_path+'/'+'dst_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'src_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'node_feats_'+str(split)+'.json'), load_json(graph_path+'/'+'num_nodes_'+str(split)+'.json')
+    
+    
