@@ -2,6 +2,7 @@
 pre_trained_models/
 playground.py
 dataset/
+Results/
 __pycache__
 tripletsRSICD.json
 
