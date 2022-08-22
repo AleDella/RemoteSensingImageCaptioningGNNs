@@ -84,12 +84,35 @@ class TripletDataset(Dataset):
     '''
     def __init__(self, graph_path: str, word2idx_path: str, return_keys: list, split: str) -> None:
         # Return keys
-        self.return_keys = return_keys
+        self._return_keys = return_keys
         # Word2idx
-        self.word2idx = load_json(word2idx_path)
+        self._word2idx = load_json(word2idx_path)
         # Graph data
-        self.dst_ids, self.src_ids, self.node_feats, self.num_nodes = load_graph_data(graph_path=graph_path, split=split)
-        
+        self._dst_ids, self._src_ids, self._node_feats, self._num_nodes = load_graph_data(graph_path=graph_path, split=split)
+    
+    @property
+    def word2idx(self):
+        return self._word2idx
+    
+    @property
+    def return_keys(self):
+        return self._return_keys
+    
+    @property
+    def dst_ids(self):
+        return self._dst_ids
+    
+    @property
+    def src_ids(self):
+        return self._src_ids
+    
+    @property
+    def node_feats(self):
+        return self._node_feats
+    
+    @property
+    def num_nodes(self):
+        return self._num_nodes
         
     def __len__(self):
         return len(self.images)
@@ -107,6 +130,7 @@ class TripletDataset(Dataset):
         out = { your_key: sample[your_key] for your_key in self.return_keys}
         
         return out
+
 
 
 class UCMDataset(TripletDataset):
