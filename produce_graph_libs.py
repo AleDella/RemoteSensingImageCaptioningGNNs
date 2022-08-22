@@ -32,15 +32,16 @@ def sentence_to_dgl(sentence, visualize=True):
     # Return the dgl network
     return dgl.from_networkx(G)
 
-############# TEST CODE #######################
 
-# Define the sentence
-sentence = 'a river goes through this area with a forest on one bank and a road on the other side'
 
-# Check the table to see the resulting graph for the sentence
-print("Right relations: ")
-# Parse the sentence
-graph = sng_parser.parse(sentence)
-sng_parser.tprint(graph)
+if __name__ == "__main__":
+    # Define the sentence
+    sentence = 'a river goes through this area with a forest on one bank and a road on the other side'
 
-result = sentence_to_dgl(sentence, visualize=True)
+    # Check the table to see the resulting graph for the sentence
+    print("Right relations: ")
+    # Parse the sentence
+    graph = sng_parser.parse(sentence)
+    sng_parser.tprint(graph)
+
+    result = sentence_to_dgl(sentence, visualize=True)

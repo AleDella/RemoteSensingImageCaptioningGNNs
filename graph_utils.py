@@ -114,7 +114,7 @@ def get_node_features(features, num_nodes):
     return new_feats
             
             
-def decode_output(out, idx2word, caption_lengths):
+def decode_output(out, idx2word):
     '''
     Function that decodes the network's output into the actual captions
     '''

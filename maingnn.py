@@ -1,26 +1,27 @@
 from dataset import UCMTriplets, collate_fn_captions
-from transformers import BertTokenizer, BertModel
+# from transformers import BertTokenizer, BertModel
 from models import CaptionGenerator, load_model
 from train import caption_trainer
 from functools import partial
 
-train_filenames = 'D:/Alessio/Provone/dataset/UCM_dataset/filenames/filenames_train.txt'
-val_filenames = 'D:/Alessio/Provone/dataset/UCM_dataset/filenames/filenames_val.txt'
-test_filenames = 'D:/Alessio/Provone/dataset/UCM_dataset/filenames/filenames_test.txt'
-img_path = 'D:/Alessio/Provone/dataset/UCM_dataset/images/'
-tripl_path = 'triplets.json'
-tripl_path_train = 'polished_triplets_train.json'
-tripl_path_val = 'polished_triplets_val.json'
-tripl_path_test = 'polished_triplets_test.json'
-anno_path = 'D:/Alessio/Provone/dataset/UCM_dataset/filenames/descriptions_UCM.txt'
-word2idx_path = 'caption_dict_UCM.json'
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = BertModel.from_pretrained("bert-base-uncased")
+train_filenames = 'dataset/UCM_dataset/filenames/filenames_train.txt'
+val_filenames = 'dataset/UCM_dataset/filenames/filenames_val.txt'
+test_filenames = 'dataset/UCM_dataset/filenames/filenames_test.txt'
+img_path = 'dataset/UCM_dataset/images/'
+tripl_path = 'dataset/UCM_dataset/triplets.json'
+tripl_path_train = 'dataset/UCM_dataset/polished_triplets_train.json'
+tripl_path_val = 'dataset/UCM_dataset/polished_triplets_val.json'
+tripl_path_test = 'dataset/UCM_dataset/polished_triplets_test.json'
+anno_path = 'dataset/UCM_dataset/filenames/descriptions_UCM.txt'
+word2idx_path = 'dataset/UCM_dataset/caption_dict_UCM.json'
+graph_path = 'dataset/UCM_dataset/Graph_data'
+# tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# model = BertModel.from_pretrained("bert-base-uncased")
 # return_k = ['src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
 
-train_dataset = UCMTriplets(img_path, train_filenames, tripl_path, tripl_path_train, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='train')
-val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='val')
+train_dataset = UCMTriplets(img_path, train_filenames, graph_path, tripl_path, tripl_path_train, anno_path, word2idx_path, return_keys=return_k, split='train')
+val_dataset = UCMTriplets(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, return_keys=return_k, split='val')
 feats_n = train_dataset.node_feats['1'][0].size(0)
 max = train_dataset.max_capt_length
 if val_dataset.max_capt_length>max:

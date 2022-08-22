@@ -16,7 +16,7 @@ class UCMTriplets(Dataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
-    def __init__(self, image_folder, image_filenames, triplets_path, polished_tripl_path, caption_path, word2idx_path, model, tokenizer, return_keys, split=None):
+    def __init__(self, image_folder, image_filenames, graph_path, triplets_path, polished_tripl_path, caption_path, word2idx_path, return_keys, split='train'):
         '''
         Args:
             image_folder: path to the folder with all the images
@@ -35,7 +35,7 @@ class UCMTriplets(Dataset):
         polished_data = json.load(f)
         f.close()
         # Added tripl filtering so no split needed
-        caption_tripl, discarded_ids = polished_data['tripl'], polished_data['discarded_ids']
+        _, discarded_ids = polished_data['tripl'], polished_data['discarded_ids']
         # Save return keys
         self.return_keys = return_keys
         # IMG read for CV part
@@ -84,47 +84,8 @@ class UCMTriplets(Dataset):
                     self.captions[id] = [sentence]
                 
 
-
-        self.node_feats = {}
-        self.num_nodes = {}
-        self.src_ids = {}
-        self.dst_ids = {}
-        # Here to check what happen when split is not passed
-        for id in caption_tripl:
-            if id not in discarded_ids:
-                f_tripl = []
-                tmp_dict = {}
-                tmp_id = 0
-                src_ids = []
-                dst_ids = []
-                node_feats = []
-                # Extract features from triplets
-                for i, tripl in enumerate(caption_tripl[id]):
-                    encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
-                    output = model(**encoded_input)
-                    f_tripl.append(output.pooler_output)
-                    if tripl[0] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[0]]=tmp_id
-                        tmp_id+=1
-                        node_feats.append(list(output.pooler_output[0]))
-                    if tripl[1] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[1]]=tmp_id
-                        tmp_id+=1
-                        node_feats.append(list(output.pooler_output[1]))
-                    if tripl[2] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[2]]=tmp_id
-                        tmp_id+=1
-                        node_feats.append(list(output.pooler_output[2]))
-                    
-                    # Create source and destination lists
-                    src_ids.append(tmp_dict[tripl[0]])
-                    dst_ids.append(tmp_dict[tripl[1]])
-                    src_ids.append(tmp_dict[tripl[1]])
-                    dst_ids.append(tmp_dict[tripl[2]])
-                self.src_ids[id] = src_ids
-                self.dst_ids[id] = dst_ids
-                self.node_feats[id] = torch.Tensor(node_feats)
-                self.num_nodes[id] = len(node_feats)
+        # # Graph data part
+        self.dst_ids, self.src_ids, self.node_feats, self.num_nodes = load_graph_data(graph_path=graph_path, split=split)  
         
     
     def __len__(self):
