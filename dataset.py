@@ -98,9 +98,9 @@ class UCMTriplets(Dataset):
         # Get the image ID
         id = list(self.triplets.keys())[index]
         try:
-            sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+            sample = {'image': self.images[int(id)], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': torch.Tensor(self.node_feats[id]), 'num_nodes': self.num_nodes[id]}
         except:
-            sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': self.node_feats[id], 'num_nodes': self.num_nodes[id]}
+            sample = {'image': self.images[id], 'imgid': id, 'triplets': self.triplets[id], 'captions': self.captions[int(id)], 'src_ids':self.src_ids[id], 'dst_ids':self.dst_ids[id], 'node_feats': torch.Tensor(self.node_feats[id]), 'num_nodes': self.num_nodes[id]}
         # Filter only what is needed 
         out = { your_key: sample[your_key] for your_key in self.return_keys}
         
