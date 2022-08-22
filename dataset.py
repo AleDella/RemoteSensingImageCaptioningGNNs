@@ -1,6 +1,5 @@
 import torch
 from torch.utils.data import Dataset
-import json
 from transformers import BertTokenizer, BertModel
 import cv2
 from graph_utils import pad_encodings, load_graph_data, load_json
