@@ -1,9 +1,14 @@
 from dataset import UCMDataset, collate_fn_captions
 # from transformers import BertTokenizer, BertModel
-from models import CaptionGenerator, load_model
+from models import CaptionGenerator
 from train import caption_trainer
-from functools import partial
 import torch
+import argparse
+
+
+# Parser options
+parser = argparse.ArgumentParser(description="Extract triplets from dataset's captions.")
+parser.add_argument('--dataset', default='ucm', required=True, help='name of the dataset of which you want to create the triplets.')
 
 train_filenames = 'dataset/UCM_dataset/filenames/filenames_train.txt'
 val_filenames = 'dataset/UCM_dataset/filenames/filenames_val.txt'
