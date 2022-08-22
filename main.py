@@ -1,4 +1,4 @@
-from dataset import UCMTriplets, collate_fn_classifier
+from dataset import UCMDataset, collate_fn_classifier
 from models import TripletClassifier, load_model 
 from train import classifier_trainer
 from transformers import BertTokenizer, BertModel
@@ -15,8 +15,8 @@ model = BertModel.from_pretrained("bert-base-uncased")
 
 return_keys = ['image','triplets']
 
-trainset = UCMTriplets(img_path, filenames_train, tripl_path, anno_path, model, tokenizer, return_keys, split='train')
-valset = UCMTriplets(img_path, filenames_val, tripl_path, anno_path, model, tokenizer, return_keys, split='val')
+trainset = UCMDataset(img_path, filenames_train, tripl_path, anno_path, model, tokenizer, return_keys, split='train')
+valset = UCMDataset(img_path, filenames_val, tripl_path, anno_path, model, tokenizer, return_keys, split='val')
 
 model = TripletClassifier(256,trainset.unique_triplets)
 

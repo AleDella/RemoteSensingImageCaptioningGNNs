@@ -12,7 +12,7 @@ def readfile(path):
         text = file.readlines()
     return text
 
-class UCMTriplets(Dataset):
+class UCMDataset(Dataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
