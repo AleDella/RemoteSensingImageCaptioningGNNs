@@ -3,6 +3,7 @@ from dataset import UCMDataset, collate_fn_captions
 from models import CaptionGenerator, load_model
 from train import caption_trainer
 from functools import partial
+import torch
 
 train_filenames = 'dataset/UCM_dataset/filenames/filenames_train.txt'
 val_filenames = 'dataset/UCM_dataset/filenames/filenames_val.txt'
@@ -22,7 +23,7 @@ return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes'
 
 train_dataset = UCMDataset(img_path, train_filenames, graph_path, tripl_path, tripl_path_train, anno_path, word2idx_path, return_keys=return_k, split='train')
 val_dataset = UCMDataset(img_path, val_filenames, tripl_path, tripl_path_val, anno_path, word2idx_path, return_keys=return_k, split='val')
-feats_n = train_dataset.node_feats['1'][0].size(0)
+feats_n = torch.Tensor(train_dataset.node_feats['1'])[0].size(0)
 max = train_dataset.max_capt_length
 if val_dataset.max_capt_length>max:
     max = val_dataset.max_capt_length

@@ -159,7 +159,6 @@ def polish_triplets(triplets):
         final_tripl = []
         for sentence in triplets[id]:
             if sentence == []:
-                # print(id)
                 continue
             else:
                 for tripl in sentence:

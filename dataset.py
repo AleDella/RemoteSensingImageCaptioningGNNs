@@ -31,9 +31,7 @@ class UCMDataset(Dataset):
             split: define if its train, val or test split
         '''
         # Polished triplets parts
-        f = open(polished_tripl_path)
-        polished_data = json.load(f)
-        f.close()
+        polished_data = load_json(polished_tripl_path)
         # Added tripl filtering so no split needed
         _, discarded_ids = polished_data['tripl'], polished_data['discarded_ids']
         # Save return keys
@@ -49,9 +47,7 @@ class UCMDataset(Dataset):
                 self.images[id] = torch.from_numpy(img.copy())
         
         # Part using the full triplet file
-        f = open(triplets_path)
-        unpolished_data = json.load(f)
-        f.close()
+        unpolished_data = load_json(triplets_path)
         # FOR TRIPLET CLASSIFICATION
         self.triplet_to_idx = unpolished_data['Triplet_to_idx']
         if split is None:
@@ -61,9 +57,7 @@ class UCMDataset(Dataset):
 
         self.captions = {}
         # Upload the word2idx file
-        f = open(word2idx_path)
-        self.word2idx=json.load(f)
-        f.close()
+        self.word2idx=load_json(word2idx_path)
         
         self.max_capt_length = 0
         for anno in readfile(caption_path):
