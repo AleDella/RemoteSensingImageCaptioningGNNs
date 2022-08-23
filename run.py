@@ -10,6 +10,8 @@ parser.add_argument('--lr',      type=float, default=0.0001,          required=F
 parser.add_argument('--bs',      type=int,   default=8,               required=False, help='Batch size.')
 parser.add_argument('--decoder', type=str,   default="linear",        required=False, help='Type of decoder used for gnn.')
 parser.add_argument('--name',    type=str,   default="GNN.pth",       required=False, help='Name for the network.')
+parser.add_argument('--es',      action='store_true',                 required=False, help='Usage of early stopping.')
+parser.add_argument('--thresh',  type=int,   default=1,               required=False, help='Number of epochs before early stopping.')
 
 
 
@@ -21,5 +23,7 @@ if __name__=="__main__":
               args.lr,
               args.bs,
               args.decoder,
-              args.name
+              args.name,
+              args.es,
+              args.thresh
               )

@@ -145,7 +145,6 @@ class caption_trainer():
             valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
         # Define the optimizer
         optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
-        # criterion = nn.CrossEntropyLoss(ignore_index=self.word2idx['<pad>'])
         if(self.use_cuda):
             self.model = self.model.to(self.device)
         if early_stopping:
@@ -161,40 +160,9 @@ class caption_trainer():
                 _, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
                 graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
                 feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
-                # print("Graph: ", graphs)
-                # print("Feats: ", feats.shape)
-                # try:
-                #     print("Captions: ", encoded_captions.shape)
-                # except:
-                #     print("Captions: ", encoded_captions[0].shape)
                 outputs = self.model(graphs, feats, encoded_captions)
-                # print("Outputs len: ", len(outputs))
-                # print("Train outputs: ", outputs[0].shape)
-                # exit(0)
                 optimizer.zero_grad()
-                
-                
-                # outputs = torch.tensor(outputs)
-                # try:
-                #     print("Outputs: {}\tCaptions: {}\n".format(outputs.shape, encoded_captions.shape))
-                # except:
-                #     print("Len Out: {}\tOutputs: {}\tCaptions: {}\n".format(len(outputs), outputs[0].shape, encoded_captions.shape))
-                
                 loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
-                # try:
-                    # loss = criterion(outputs.reshape(-1, outputs.shape[2]), encoded_captions.reshape(-1))
-                # except:
-                    # loss = criterion(outputs, encoded_captions)
-                
-                # print("Loss: ", loss)
-                # print("Done!")
-                # exit(0)
-                # loss = 0
-                # for caption in captions:
-                #     # if i == 0 and epoch == 0:
-                #     #     print("caption: ", caption)
-                #     loss += criterion(outputs, [caption], self.word2idx, self.max_capt_length, self.device)
-                # loss = loss/5 # number of captions
                 loss.backward()
                 optimizer.step()
                 epoch_loss_train+=loss.item()
@@ -206,15 +174,7 @@ class caption_trainer():
                         graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
                         feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
                         outputs = self.model(graphs, feats, encoded_captions)
-                        # print("Val outputs: ", outputs[0].shape)
-                        # exit(0)
                         loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
-                        # loss = 0
-                        # for caption in captions:
-                        #     # if i == 0 and epoch == 0:
-                        #     #     print("caption: ", caption)
-                        #     loss += criterion(outputs, [caption], self.word2idx, self.max_capt_length, self.device)
-                        # loss = loss/5
                         epoch_loss_val+=loss.item()
                     
             print('Training loss: {:.3f}'.format(epoch_loss_train/i))
@@ -225,7 +185,6 @@ class caption_trainer():
                     val_max = epoch_loss_val/j
                     train_max = epoch_loss_train/i
                     best_model=self.model
-                    # print("Stopped training due to overfit")
                 else:
                     tollerance+=1
                     if tollerance>tol_threshold:
@@ -238,52 +197,3 @@ class caption_trainer():
             torch.save(best_model,self.save_path)
         else:
             torch.save(self.model,self.save_path)
-    
-    # def finetune(self, model, epochs, learning_rate, batch_size):
-    #     self.model = model
-    #     # Set all the parameters to trainable 
-    #     for param in self.model.parameters():
-    #         param.requires_grad = True
-            
-    #     trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
-    #     valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
-    #     # Define the criterion
-    #     criterion = nn.BCEWithLogitsLoss(reduction='mean')
-    #     # Define the optimizer
-    #     optimizer = optim.SGD(self.model.parameters(), lr=learning_rate)
-        
-    #     if(self.use_cuda):
-    #         self.model = self.model.to(self.device)
-        
-    #     for epoch in range(epochs):
-    #         self.model.train()
-    #         epoch_loss_train = 0
-    #         epoch_loss_val = 0
-    #         print('Epoch: '+str(epoch))
-    #         for i, data in enumerate(tqdm(trainloader)):
-    #             images, triplets = data
-    #             images = images.to(self.device)
-    #             triplets = triplets.to(self.device)
-    #             outputs = self.model(images)
-    #             optimizer.zero_grad()
-    #             loss = criterion(outputs,triplets)
-    #             loss.backward()
-    #             optimizer.step()
-    #             epoch_loss_train+=loss.item()
-            
-    #         with torch.no_grad():
-    #             self.model.eval()
-    #             for j, data in enumerate(tqdm(valloader)):
-    #                 images, triplets = data
-    #                 images = images.to(self.device)
-    #                 triplets = triplets.to(self.device)
-    #                 outputs = self.model(images)
-    #                 loss = criterion(outputs,triplets)
-    #                 epoch_loss_val+=loss.item()
-                    
-            
-    #         print('Training loss: {:.3f}'.format(epoch_loss_train/i))
-    #         print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
-        
-    #     torch.save(self.model,self.save_path)
-        

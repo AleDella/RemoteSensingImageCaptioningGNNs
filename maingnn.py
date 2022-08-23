@@ -1,13 +1,28 @@
 from dataset import UCMDataset, RSICDDataset, collate_fn_captions
-# from transformers import BertTokenizer, BertModel
 from models import CaptionGenerator
 from train import caption_trainer
 import torch
 
-def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name):
+def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, early_stopping, threshold):
     '''
     Function that initialize the training for the gnn depending on the task and dataset
+    
+    Args:
+        dataset (str): dataset used for training
+        task (str): type of desired task
+        epochs (int): number of training epochs
+        lr (float): learning rate to be used
+        batch_size (int): batch size used for training
+        decoder (str): decoder used for training
+        network_name (str): name of the file to which the network will be saved
+        early_stopping (bool): True if allow the use of early stopping; False otherwise
+        threshold (int): number of epochs after which early stopping activates
+    
+    Return:
+        None
     '''
+    
+    
     if task == "tripl2caption":
         # Dataset definition
         if dataset == 'ucm':
@@ -34,13 +49,13 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name):
             val_dataset = RSICDDataset(img_path, graph_path, tripl_path, anno_path, word2idx_path, return_k, split='val')
         
         # Network training part
-        feats_n = torch.Tensor(train_dataset.node_feats['1'])[0].size(0)
+        feats_n = torch.Tensor(train_dataset.node_feats[list(train_dataset.node_feats.keys())[0]])[0].size(0)
         max = train_dataset.max_capt_length
         if val_dataset.max_capt_length>max:
             max = val_dataset.max_capt_length
         model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder=decoder)
         trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, network_name)
-        trainer.fit(epochs, lr, batch_size, model._loss, early_stopping=True, tol_threshold=1)
+        trainer.fit(epochs, lr, batch_size, model._loss, early_stopping=early_stopping, tol_threshold=threshold)
     else:
         print("Task not yet implemented.")
 
