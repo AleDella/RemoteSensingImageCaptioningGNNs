@@ -13,7 +13,7 @@ class TripletClassifier(nn.Module):
         super(TripletClassifier, self).__init__()
         self.input_size = input_size
         self.num_classes = num_classes
-        self.model = resnet152(pretrained=True)
+        self.model = resnet152(weights="IMAGENET1K_V2")
         # Replace the last layer with a new layer for classification
         self.model.fc = nn.Linear(in_features=2048,out_features=num_classes)
         

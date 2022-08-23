@@ -27,9 +27,17 @@ def collate_fn_classifier(data, triplet_to_idx):
     triplets_tensor = torch.zeros((len(triplets),len(triplet_to_idx))) # To store one hot encodings
     
     i=0
-    for image_triplet in triplets[0]:
-        for triplet in image_triplet:
-            triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
+    # print(triplets)
+    # exit(0)
+    # Added this try except for rsicd dataset
+    try:
+        for image_triplet in triplets[0]:
+            for triplet in image_triplet:
+                triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
+    except:
+        for image_triplet in [triplets[0]]:
+            for triplet in image_triplet:
+                triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
     
     return images, triplets_tensor
 
@@ -219,6 +227,7 @@ class RSICDDataset(TripletDataset):
         super().__init__(graph_path, word2idx_path, return_keys, split)
         # Polished triplets parts
         self.triplets = load_json(polished_tripl_path)[split]
+        self.triplet_to_idx = load_json(polished_tripl_path)['Triplet_to_idx']
         # Save annotations
         self.annotations = load_json(annotation_path)['images']
         # IMG read for CV part
