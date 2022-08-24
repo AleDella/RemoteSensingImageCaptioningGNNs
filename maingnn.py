@@ -137,41 +137,34 @@ def test_gnn(dataset, task, decoder, network_name, filename):
         max = test_dataset.max_capt_length
         model = CaptionGenerator(feats_n, max, test_dataset.word2idx, decoder=decoder)
         model = torch.load(network_name)
-        eval_captions(test_dataset, model, 1, filename)
-        
-        
-
-# # # Load old model
-# test_dataset = UCMTriplets(img_path, test_filenames, tripl_path, tripl_path_test, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='test')
-# feats_n = test_dataset.node_feats[list(test_dataset.node_feats.keys())[0]][0].size(0)
-# max = test_dataset.max_capt_length
-# model = CaptionGenerator(feats_n, max, test_dataset.word2idx)
-# model = load_model('GNN.pth')
-# # Printing predictions to file
-# from torch.utils.data import DataLoader
-# import torch
-# from tqdm import tqdm
-# import dgl
-# from graph_utils import decode_output, get_node_features
-# import json
-# testloader = DataLoader(test_dataset,batch_size=1,shuffle=False,collate_fn=partial(collate_fn_captions, word2idx=test_dataset.word2idx, training=True))
-# model = model.to('cuda')
-# idx2word = {v: k for k, v in test_dataset.word2idx.items()}
-# with torch.no_grad():
-#     model.eval()
-#     result = {}
-#     for _, data in enumerate(tqdm(testloader)):
-#         ids, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
-#         graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to('cuda')
-#         feats = get_node_features(node_feats, sum(num_nodes)).to('cuda')
-#         outputs = model(graphs, feats, encoded_captions)
-#         # print("Out info: {} {}\n".format(len(outputs), outputs[0].shape))
-#         # print("Dictionary length: ", len(test_dataset.word2idx))
-#         decoded_outputs = decode_output(outputs, idx2word, [])
-#         for i, id in enumerate(ids):
-#             result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
+        eval_captions(test_dataset, model, filename)
+    # Still deciding if implement
+    # elif task == "img2tripl":
+    #     # Dataset definition
+    #     if dataset == 'ucm':
+    #         test_filenames = 'dataset/UCM_dataset/filenames/filenames_test.txt'
+    #         img_path = 'dataset/UCM_dataset/images/'
+    #         tripl_path = 'dataset/UCM_dataset/triplets.json'
+    #         polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm.json'
+    #         anno_path = 'dataset/UCM_dataset/filenames/descriptions_UCM.txt'
+    #         word2idx_path = 'dataset/UCM_dataset/caption_dict_UCM.json'
+    #         graph_path = 'dataset/UCM_dataset/Graph_data'
+    #         return_k = ['image','triplets']
+    #         img_dim = 256
+    #         test_dataset = UCMDataset(img_path, test_filenames, graph_path, tripl_path, polished_tripl_path, anno_path, word2idx_path, return_keys=return_k, split='test')
             
-# with open("captions_linear.json", "w") as outfile:
-#     json.dump(result, outfile)
-
-
+    #     if dataset == 'rsicd':
+    #         graph_path = 'dataset/RSICD_dataset/Graph_data'
+    #         word2idx_path = 'dataset/RSICD_dataset/caption_dict_RSICD.json'
+    #         anno_path = 'dataset/RSICD_dataset/polished_dataset.json'
+    #         img_path = 'dataset/RSICD_dataset/RSICD_images'
+    #         tripl_path = 'dataset/RSICD_dataset/triplets_rsicd.json'
+    #         return_k = ['image','triplets']
+    #         img_dim = 224
+    #         test_dataset = RSICDDataset(img_path, graph_path, tripl_path, anno_path, word2idx_path, return_k, split='test')
+        
+    #     model = TripletClassifier(img_dim,len(test_dataset.triplet_to_idx))
+    #     model = torch.load(network_name)
+    #     eval_classification(test_dataset, model, filename)
+    else:
+        print("Task not yet implemented.")
