@@ -1,6 +1,7 @@
 from dataset import UCMDataset, RSICDDataset, collate_fn_captions, collate_fn_classifier
 from models import CaptionGenerator, TripletClassifier
 from train import caption_trainer, classifier_trainer
+from eval import eval_captions
 import torch
 
 def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, early_stopping, threshold):
@@ -88,6 +89,57 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
         trainer.fit(epochs, lr, batch_size)
     else:
         print("Task not yet implemented.")
+        
+        
+        
+def test_gnn(dataset, task, decoder, network_name, filename):
+    '''
+    Function that initialize the training for the gnn depending on the task and dataset
+    
+    Args:
+        dataset (str): dataset used for training
+        task (str): type of desired task
+        epochs (int): number of training epochs
+        lr (float): learning rate to be used
+        batch_size (int): batch size used for training
+        decoder (str): decoder used for training
+        network_name (str): name of the file to which the network will be saved
+        early_stopping (bool): True if allow the use of early stopping; False otherwise
+        threshold (int): number of epochs after which early stopping activates
+    
+    Return:
+        None
+    '''
+    if task == "tripl2caption":
+        # Dataset definition
+        if dataset == 'ucm':
+            test_filenames = 'dataset/UCM_dataset/filenames/filenames_test.txt'
+            img_path = 'dataset/UCM_dataset/images/'
+            tripl_path = 'dataset/UCM_dataset/triplets.json'
+            polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm.json'
+            anno_path = 'dataset/UCM_dataset/filenames/descriptions_UCM.txt'
+            word2idx_path = 'dataset/UCM_dataset/caption_dict_UCM.json'
+            graph_path = 'dataset/UCM_dataset/Graph_data'
+            return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
+            test_dataset = UCMDataset(img_path, test_filenames, graph_path, tripl_path, polished_tripl_path, anno_path, word2idx_path, return_keys=return_k, split='test')
+            
+        if dataset == 'rsicd':
+            graph_path = 'dataset/RSICD_dataset/Graph_data'
+            word2idx_path = 'dataset/RSICD_dataset/caption_dict_RSICD.json'
+            anno_path = 'dataset/RSICD_dataset/polished_dataset.json'
+            img_path = 'dataset/RSICD_dataset/RSICD_images'
+            tripl_path = 'dataset/RSICD_dataset/triplets_rsicd.json'
+            return_k = ['imgid', 'src_ids', 'dst_ids', 'node_feats', 'captions', 'num_nodes']
+            test_dataset = RSICDDataset(img_path, graph_path, tripl_path, anno_path, word2idx_path, return_k, split='test')
+            
+        # Network training part
+        feats_n = torch.Tensor(test_dataset.node_feats[list(test_dataset.node_feats.keys())[0]])[0].size(0)
+        max = test_dataset.max_capt_length
+        model = CaptionGenerator(feats_n, max, test_dataset.word2idx, decoder=decoder)
+        model = torch.load(network_name)
+        eval_captions(test_dataset, model, 1, filename)
+        
+        
 
 # # # Load old model
 # test_dataset = UCMTriplets(img_path, test_filenames, tripl_path, tripl_path_test, anno_path, word2idx_path, model, tokenizer, return_keys=return_k, split='test')
