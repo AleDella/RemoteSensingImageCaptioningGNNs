@@ -1,16 +1,23 @@
 # Provone
 
-Files in the repo:
-    <li> <code>graph_utils.py</code> contains util functions for graphs understanding and manipulation</li>
-    <li> <code>produce_graph_libs.py</code> that is used as demo to understand graphs from senteces</li>
-    <li> <code>extract_triplets.py</code> file used to extract triplets from captions</li>
-    <li> <code>train.py</code> file containing the training procedures</li>
-    <li> <code>main.py</code> file containing the main (for now only for the first part of the model)</li>
-    <li> <code>models.py</code> contains the model definition for triplets classification and the second part of the task</li>
-    <li> <code>gnn.py</code> contains the model definition for the Graph neural network </li>
-    <li> <code>dataset.py</code> contains the definition for the dataset class for both tasks</li>
+Basic usage of the project:
+<code> python run.py<code>
 
-To Do:
-    <li> Train the second part of the network </li>
-    <li> Fix the dataset usage for both tasks (mainly the contructor)</li>
-    <li> Create a <code>collate_fn</code> to be used in both tasks</li>
+Possible arguments:
+<li> <code> --dataset </code>: name of the dataset used for the run (currently "ucm" or "rsicd")</li>
+<li> <code> --task </code>: name of the desired task (currently "tripl2caption" or "img2tripl")</li>
+<li> <code> --e </code>: number of training epochs</li>
+<li> <code> --lr </code>: learning rate</li>
+<li> <code> --bs </code>: batch size</li>
+<li> <code> --decoder </code>: type of decoder used for GNNs (currently "linear" or "lstm")</li>
+<li> <code> --name </code>: name of the file of the network</li>
+<li> <code> --es </code>: allow usage of early stopping</li>
+<li> <code> --thresh </code>: threshold of early stopping</li>
+<li> <code> --test </code>: do the run in test mode (currently implemented only with "tripl2caption")</li>
+<li> <code> --o </code>: name of the file with the results of the testing</li>
+
+To Do (ordered in priority):
+<li> implement and test the addition of image features to the gnn</li>
+<li> implement and test the MLAP model for the gnn part</li>
+<li> do the evaluation for the classification part (Maybe)</li>
+<li> do the train/eval for the whole pipeline (Maybe) </li>
