@@ -197,3 +197,85 @@ class caption_trainer():
             torch.save(best_model,self.save_path)
         else:
             torch.save(self.model,self.save_path)
+            
+            
+class improved_caption_trainer():
+    '''
+    Class to train the caption inference on a dataset.
+    The dataset should return the graphs, captions, max_sequence_length and word2idx dictionary
+    '''
+    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None):
+        self.model = model
+        self.dataset_train = dataset_train
+        self.dataset_val = dataset_val
+        self.save_path = save_path
+        self.collate_fn = collate_fn
+        self.use_cuda = use_cuda
+        self.word2idx = word2idx
+        self.max_capt_length = max_capt_length
+        if device is None:
+            # Take default cuda:0 
+            device = torch.device("cuda:0")
+        self.device = device
+    
+    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=5):
+        # Define dataloader
+        trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=True, collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
+        if self.dataset_val!='':
+            valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
+        # Define the optimizer
+        optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
+        if(self.use_cuda):
+            self.model = self.model.to(self.device)
+        if early_stopping:
+            val_max = float('inf')
+            train_max = float('inf')
+            tollerance = 0
+        for epoch in range(epochs):
+            self.model.train()
+            epoch_loss_train = 0
+            epoch_loss_val = 0
+            print('Epoch: '+str(epoch))
+            for i, data in enumerate(tqdm(trainloader)):
+                _, img, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
+                graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
+                feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
+                img = img.to(self.device)
+                outputs = self.model(graphs, feats, img, encoded_captions)
+                optimizer.zero_grad()
+                loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                loss.backward()
+                optimizer.step()
+                epoch_loss_train+=loss.item()
+            if self.dataset_val!='':
+                with torch.no_grad():
+                    self.model.eval()
+                    for j, data in enumerate(tqdm(valloader)):
+                        _, img, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
+                        graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
+                        feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
+                        img = img.to(self.device)
+                        outputs = self.model(graphs, feats, img, encoded_captions)
+                        loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        epoch_loss_val+=loss.item()
+                    
+            print('Training loss: {:.3f}'.format(epoch_loss_train/i))
+            if self.dataset_val!='':
+                print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+            if early_stopping:
+                if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) and tollerance<tol_threshold :
+                    val_max = epoch_loss_val/j
+                    train_max = epoch_loss_train/i
+                    best_model=self.model
+                else:
+                    tollerance+=1
+                    if tollerance>tol_threshold:
+                        print("Stopped training due to overfit")
+                        break
+                    # Restart from the best checkpoint
+                    self.model = best_model
+        
+        if early_stopping:
+            torch.save(best_model,self.save_path)
+        else:
+            torch.save(self.model,self.save_path)

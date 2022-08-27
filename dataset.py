@@ -84,6 +84,56 @@ def collate_fn_captions(data, word2idx, training):
 
     return [d['imgid'] for d in data], [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
 
+
+def collate_fn_improved(data, word2idx, training):
+    '''
+    Collate function for the graph to caption
+    '''
+    # Image part
+    images = [d['image'] for d in data]    
+    images = torch.stack(images, 0)
+    images = images.permute(0,3,1,2)
+    # Between 0 and 1 for pytorch
+    images = images/255
+    
+    src_ids = [d['src_ids'] for d in data]
+    dst_ids = [d['dst_ids'] for d in data]
+    node_feats = [torch.tensor(d['node_feats'])  if type(d['node_feats']) != torch.Tensor else d['node_feats'] for d in data]
+    num_nodes = [d['num_nodes'] for d in data]
+    max_rel = len(max(src_ids, key=len))
+    max_nodes = max(num_nodes)
+    # ID
+    for i, elem in enumerate(src_ids):
+        # Add self loops to fix length
+        while len(elem)<max_rel:
+            src_ids[i].append(0)
+            dst_ids[i].append(0)
+        # Add random node feats to fix lengths
+        if node_feats[i].size(0)<max_nodes:
+            try:
+                new_node_feats = torch.zeros((node_feats[i].size(0)+(max_nodes-node_feats[i].size(0)), node_feats[i].size(1)))
+            except:
+                print("Len: {}\tSize: {}\t ID: {}\n".format(len(node_feats), node_feats[i].size(), node_feats))
+                exit(0)
+            for j in range(node_feats[i].size(0)):
+                new_node_feats[j] = node_feats[i][j]
+            node_feats[i] = new_node_feats
+    # Create the final Tensor
+    new_feats = torch.zeros((len(node_feats), node_feats[0].size(0), node_feats[0].size(1)))
+    for i, elem in enumerate(node_feats):
+        new_feats[i] = elem
+    
+    # Create the captions tensor
+    new_cap_ids = []
+    for d in data:
+        smth = []
+        for cap in d['captions']:
+            tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
+            smth.append(tmp)
+        new_cap_ids.append(smth)
+
+    return [d['imgid'] for d in data], images, [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
+
 ################################################
 
 class TripletDataset(Dataset):

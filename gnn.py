@@ -4,10 +4,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
 from dgl.ops import edge_softmax
-from transformers import BertModel, BertTokenizer
-# WIP
-# GNN module
+
+
 class GATLayer(nn.Module):
+    '''
+    Graph Attention Layer
+    '''
     def __init__(self, dim_feat: int, num_heads: int):
         super().__init__()
         self.fc_n = nn.Linear(dim_feat, dim_feat * num_heads, bias=False)
@@ -39,15 +41,11 @@ class GATLayer(nn.Module):
         graph.update_all(fn.u_mul_e("ft", "a", "m"), fn.sum("m", "ft"))
         return self.trans(graph.dstdata["ft"].view(-1, self._num_heads * self._dim_feat))
 
-
-
-
-
-
-
-
 # Simple GNN model
 class GNN(nn.Module):
+    '''
+    Graph neural network class
+    '''
     def __init__(self, in_feats):
         super(GNN, self).__init__()
         self.conv1 = GATLayer(in_feats, 8)
@@ -68,13 +66,18 @@ class GNN(nn.Module):
         return self.pooling(g, h)
 
 
-##################################
-# Taken from MLAP code (STILL TO ADAPT)
+
 def _encode_seq_to_arr(sequence, vocab2idx, max_seq_len) -> torch.Tensor:
+    '''
+    Function that encodes a sequence (used internally)
+    '''
     seq = [seq[:max_seq_len] + ["<pad>"] * max(0, max_seq_len - len(seq)) for seq in sequence]
     return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["<unk>"] for x in seq for w in x], dtype=torch.int64)
 
 class LSTMDecoder(nn.Module):
+    '''
+    LSTM decoder for graph features
+    '''
     def __init__(self, dim_feat, max_seq_len, vocab2idx):
         super().__init__()
         self._max_seq_len = max_seq_len
@@ -121,7 +124,31 @@ class LSTMDecoder(nn.Module):
             out.append(torch.matmul(pred_emb, vocab_mat.T) + self.vocab_bias.unsqueeze(0))
 
         return out
-###########################
+
+
+class decoderRNN(nn.Module):
+    '''
+    RNN decoder for graph features
+    '''
+    def __init__(self, embed_size,vocab_size, hidden_size, num_layers):
+        super(decoderRNN, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers)
+        self.linear = nn.Linear(hidden_size, vocab_size)
+        self.dropout = nn.Dropout(0.5)
+    
+    def forward(self, features, caption):
+        print("\nFull caption: ", caption.shape)
+        embeddings = self.dropout(self.embedding(caption.to('cuda' if torch.cuda.is_available() else 'cpu')))
+        print("Embeddings: {}\tFeatures: {}\n".format(embeddings.shape, features.shape))
+        embeddings = torch.cat((features.unsqueeze(1),embeddings), dim=0)
+        hiddens, _ = self.lstm(embeddings)
+        outputs = self.linear(hiddens)
+        return outputs
+
+
+
+
 
 # Testing
 if __name__ == '__main__':
