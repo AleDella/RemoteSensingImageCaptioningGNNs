@@ -4,7 +4,7 @@ from train import caption_trainer, classifier_trainer, improved_caption_trainer
 from eval import eval_captions, improved_eval_captions
 import torch
 
-def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, early_stopping, threshold):
+def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, early_stopping, threshold, gnn, vir, depth):
     '''
     Function that initialize the training for the gnn depending on the task and dataset
     
@@ -54,7 +54,7 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
         max = train_dataset.max_capt_length
         if val_dataset.max_capt_length>max:
             max = val_dataset.max_capt_length
-        model = CaptionGenerator(feats_n, max, train_dataset.word2idx, decoder=decoder)
+        model = CaptionGenerator(feats_n, max, train_dataset.word2idx, gnn=gnn, vir=vir, depth=depth, decoder=decoder)
         trainer = caption_trainer(model,train_dataset,val_dataset,collate_fn_captions, train_dataset.word2idx, max, network_name)
         trainer.fit(epochs, lr, batch_size, model._loss, early_stopping=early_stopping, tol_threshold=threshold)
     # Still to be tested (Probably rsicd need tripl2idx in the file)
@@ -121,7 +121,7 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
             max = val_dataset.max_capt_length
         img_encoder = TripletClassifier(img_dim,len(train_dataset.triplet_to_idx))
         img_encoder = load_model('model_finetuned_'+dataset+'.pth')
-        model = ImprovedCaptionGenerator(img_encoder, feats_n, max, train_dataset.word2idx, decoder=decoder)
+        model = ImprovedCaptionGenerator(img_encoder, feats_n, max, train_dataset.word2idx, gnn=gnn, vir=vir, depth=depth, decoder=decoder)
         trainer = improved_caption_trainer(model,train_dataset,val_dataset, collate_fn_improved, train_dataset.word2idx, max, network_name)
         trainer.fit(epochs, lr, batch_size, model._loss, early_stopping=early_stopping, tol_threshold=threshold)
     else:
@@ -129,7 +129,7 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
         
         
         
-def test_gnn(dataset, task, decoder, network_name, filename):
+def test_gnn(dataset, task, decoder, network_name, filename, gnn, vir, depth):
     '''
     Function that initialize the training for the gnn depending on the task and dataset
     
@@ -172,7 +172,7 @@ def test_gnn(dataset, task, decoder, network_name, filename):
         # Network training part
         feats_n = torch.Tensor(test_dataset.node_feats[list(test_dataset.node_feats.keys())[0]])[0].size(0)
         max = test_dataset.max_capt_length
-        model = CaptionGenerator(feats_n, max, test_dataset.word2idx, decoder=decoder)
+        model = CaptionGenerator(feats_n, max, test_dataset.word2idx, gnn=gnn, vir=vir, depth=depth, decoder=decoder)
         model = torch.load(network_name)
         eval_captions(test_dataset, model, filename)
     # WIP ###################################
@@ -203,7 +203,7 @@ def test_gnn(dataset, task, decoder, network_name, filename):
         max = test_dataset.max_capt_length
         img_encoder = TripletClassifier(img_dim,len(test_dataset.triplet_to_idx))
         # img_encoder = load_model('model_finetuned.pth')
-        model = ImprovedCaptionGenerator(img_encoder, feats_n, max, test_dataset.word2idx, decoder=decoder)
+        model = ImprovedCaptionGenerator(img_encoder, feats_n, max, test_dataset.word2idx, gnn=gnn, vir=vir, depth=depth, decoder=decoder)
         model = torch.load(network_name)
         improved_eval_captions(test_dataset, model, filename)
     #########################################

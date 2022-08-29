@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import dgl.function as fn
 from dgl.ops import edge_softmax
 
-
+# GNN modules ####################################################
 class GATLayer(nn.Module):
     '''
     Graph Attention Layer
@@ -50,8 +50,11 @@ class GNN(nn.Module):
         super(GNN, self).__init__()
         self.conv1 = GATLayer(in_feats, 8)
         self.conv2 = GATLayer(in_feats, 8)
-        # self.conv1 = dgl.nn.GINConv(torch.nn.Linear(in_feats, h_feats), 'mean')
-        # self.conv2 = dgl.nn.GINConv(torch.nn.Linear(h_feats, h_feats), 'mean')
+        # # Added a message passing
+        # self.conv3 = GATLayer(in_feats, 8)
+        # self.conv1 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
+        # self.conv2 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
+        # self.conv3 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
         self.pooling = dgl.nn.GlobalAttentionPooling(torch.nn.Linear(in_feats, 1))
         # self.conv1 = dgl.nn.GATConv((in_feats, h_feats), 8, 8, feat_drop=0.2, allow_zero_in_degree=True)
         # self.conv2 = dgl.nn.GATConv((h_feats, h_feats), 8, 8, feat_drop=0.2, allow_zero_in_degree=True)
@@ -60,13 +63,102 @@ class GNN(nn.Module):
         # Perform graph convolution and activation function.
         h = F.relu(self.conv1(g, in_feat))
         h = F.relu(self.conv2(g, h))
+        # h = F.relu(self.conv3(g, h))
         # g.ndata['h'] = h
         # Calculate graph representation by averaging all the node representations.
         # hg = dgl.mean_nodes(g, 'h')
         return self.pooling(g, h)
 
+class MLAPModel(nn.Module):
+    def __init__(
+            self,
+            res: bool,
+            vir: bool,
+            dim_feat: int,
+            depth: int,
+            dropout: bool=True
+    ):
+        super().__init__()
 
+        self._dim_feat = dim_feat
+        self._depth = depth
+        self._res = res
+        self._vir = vir
+        self._dropout = dropout
 
+        self.layers = nn.ModuleList([GATLayer(dim_feat, 3) for _ in range(depth)])
+        
+        if vir:
+            self.vnode_emb = nn.Embedding(1, dim_feat)
+            nn.init.constant_(self.vnode_emb.weight.data, 0)
+
+            self.vnode_mlp = nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(dim_feat, 2 * dim_feat),
+                    nn.BatchNorm1d(2 * dim_feat),
+                    nn.ReLU(),
+                    nn.Linear(2 * dim_feat, dim_feat),
+                    nn.BatchNorm1d(dim_feat),
+                    nn.ReLU(),
+                )
+                for _ in range(depth - 1)
+            ])
+        self.Tflag=0
+        # Default pooling method (Global attention)
+        self.poolings = nn.ModuleList(
+            [dgl.nn.GlobalAttentionPooling(nn.Sequential(
+                nn.Linear(self._dim_feat, 2 * self._dim_feat),
+                nn.ReLU(),
+                nn.Linear(2 * self._dim_feat, 1),
+            )) for _ in range(self._depth)]
+        )
+        
+
+    def forward(self, graph, feat):
+        self._graph_embs = []
+
+        if self._vir:
+            vnode_emb = self.vnode_emb(torch.zeros(graph.batch_size, dtype=torch.int64).to(feat.device))
+
+        for d in range(self._depth):
+            if self._vir:
+                feat = feat + vnode_emb[torch.repeat_interleave(graph.batch_num_nodes())]
+
+            feat_in = feat
+            feat = self.layers[d](graph, feat)
+            if d < self._depth - 1:
+                feat = F.relu(feat)
+            if self._dropout:
+                feat = F.dropout(feat, training=self.training)
+            if self._res:
+                feat = feat + feat_in
+
+            if self.Tflag:
+                feat_in = feat
+                feat = self.poolings[d](graph, feat)
+                self._graph_embs.append(feat_in + feat)
+            else:    
+                self._graph_embs.append(self.poolings[d](graph, feat))
+
+            if self._vir and d < self._depth - 1:
+                vnode_emb_tmp = dgl.nn.SumPooling()(graph, feat) + vnode_emb
+                vnode_emb_tmp = F.dropout(self.vnode_mlp[d](vnode_emb_tmp), training=self.training)
+                if self._res:
+                    vnode_emb = vnode_emb + vnode_emb_tmp
+                else:
+                    vnode_emb = vnode_emb_tmp
+        
+        return self._aggregate()
+
+    def _aggregate(self):
+        return torch.stack(self._graph_embs, dim=0).mean(dim=0)
+
+    def get_emb(self, graph, feat):
+        out = self.forward(graph, feat)
+        self._graph_embs.append(out)
+        return torch.stack(self._graph_embs, dim=0)
+
+# Util function
 def _encode_seq_to_arr(sequence, vocab2idx, max_seq_len) -> torch.Tensor:
     '''
     Function that encodes a sequence (used internally)
@@ -74,6 +166,9 @@ def _encode_seq_to_arr(sequence, vocab2idx, max_seq_len) -> torch.Tensor:
     seq = [seq[:max_seq_len] + ["<pad>"] * max(0, max_seq_len - len(seq)) for seq in sequence]
     return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["<unk>"] for x in seq for w in x], dtype=torch.int64)
 
+
+
+# Decoders ###########################################################à
 class LSTMDecoder(nn.Module):
     '''
     LSTM decoder for graph features

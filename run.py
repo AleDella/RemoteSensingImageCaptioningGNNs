@@ -14,6 +14,9 @@ parser.add_argument('--es',      action='store_true',                          r
 parser.add_argument('--thresh',  type=int,            default=1,               required=False, help='Number of epochs before early stopping.')
 parser.add_argument('--test',    action='store_true',                          required=False, help='Use network in test mode.')
 parser.add_argument('--o',       type=str,            default="captions.json", required=False, help='Name of the file for captions.')
+parser.add_argument('--gnn',     type=str,            default="gat",           required=False, help='Type of graph neural network to use.')
+parser.add_argument('--vir',     action='store_true',                          required=False, help='If True, use virtual node.')
+parser.add_argument('--depth',       type=int,            default=1,               required=False, help='Depth of the GNN.')
 
 
 if __name__=="__main__":
@@ -23,7 +26,10 @@ if __name__=="__main__":
                 args.task,
                 args.decoder,
                 args.name,
-                args.o
+                args.o,
+                args.gnn,
+                args.vir,
+                args.depth
                 )
     else:
         train_gnn(args.dataset,
@@ -34,5 +40,8 @@ if __name__=="__main__":
                 args.decoder,
                 args.name,
                 args.es,
-                args.thresh
+                args.thresh,
+                args.gnn,
+                args.vir,
+                args.depth
                 )

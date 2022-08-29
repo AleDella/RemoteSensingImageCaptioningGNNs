@@ -2,7 +2,7 @@ from turtle import forward
 import torch
 import torch.nn as nn
 from torchvision.models import resnet152
-from gnn import GNN, LSTMDecoder, _encode_seq_to_arr, decoderRNN
+from gnn import GNN, LSTMDecoder, _encode_seq_to_arr, decoderRNN, MLAPModel
 
 class TripletClassifier(nn.Module):
     '''
@@ -48,9 +48,12 @@ class CaptionGenerator(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, feats_dim, max_seq_len, vocab2idx, decoder='lstm') -> None:
+    def __init__(self, feats_dim, max_seq_len, vocab2idx, gnn='gat', vir=True, depth=1, decoder='lstm') -> None:
         super(CaptionGenerator, self).__init__()
-        self.encoder = GNN(feats_dim)
+        if gnn == 'gat':
+            self.encoder = GNN(feats_dim)
+        elif gnn == 'mlap':
+            self.encoder = MLAPModel(True, vir, feats_dim, depth)
         self.decoder_type = decoder
         if self.decoder_type == 'linear':
             self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
@@ -89,9 +92,12 @@ class ImprovedCaptionGenerator(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, decoder='lstm') -> None:
+    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, gnn='gat', vir=True, depth=1, decoder='lstm') -> None:
         super(ImprovedCaptionGenerator, self).__init__()
-        self.encoder = GNN(feats_dim)
+        if gnn == 'gat':
+            self.encoder = GNN(feats_dim)
+        elif gnn == 'mlap':
+            self.encoder = MLAPModel(True, vir, feats_dim, depth)
         
         # Incorporate image in the pipeline
         self.img_encoder = img_encoder
@@ -119,6 +125,7 @@ class ImprovedCaptionGenerator(nn.Module):
         i_feats = self.img_encoder(img)
         
         graph_feats = self.dropout(self.encoder(g, g_feats))
+        # Weighted sum 
         mod_feats = graph_feats + (i_feats * self.img_weight)
         
         if self.decoder_type == 'linear':
