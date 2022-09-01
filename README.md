@@ -20,7 +20,5 @@
 
 ## To Do (ordered in priority):
 
-<li> implement and test the addition of image features to the gnn</li>
-<li> implement and test the MLAP model for the gnn part</li>
 <li> do the evaluation for the classification part (Maybe)</li>
 <li> do the train/eval for the whole pipeline (Maybe) </li>
