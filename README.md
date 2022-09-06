@@ -19,9 +19,10 @@
 <li> <code> --o </code>: name of the file with the results of the testing</li>
 
 # TODO LIST 
-- [ ] do the dictionary of the captions for UCM and RSICD (key: image_id, value: caption, list of tokens)
+- [X] do the dictionary of the captions for UCM and RSICD (key: image_id, value: caption, list of tokens)
 - [ ] do the complete pipeline (from image to caption) train and validation 
-- [ ] performance of the triplet classifier
+- [X] performance of the triplet classifier
+- [ ] find a method to improve classifier
 - [ ] Begin the presentation (introduction to GNN)
 
 
