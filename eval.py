@@ -106,9 +106,11 @@ def eval_classification(dataset, model, filename):
             images = images.to(device)
             triplets = triplets.to(device)
             outputs = model(images)
+            outputs = outputs.reshape((outputs.shape[0], int(outputs.shape[1]/2), 2))
             outputs = torch.sigmoid(outputs)
-            outputs[outputs>=0.5] = 1
-            outputs[outputs<0.5] = 0
+            # outputs[outputs>=0.5] = 1
+            # outputs[outputs<0.5] = 0
+            outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
             accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
             outputs = outputs.squeeze()
             outputs = outputs.nonzero().squeeze()

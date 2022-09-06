@@ -1,5 +1,5 @@
 from dataset import UCMDataset, RSICDDataset, collate_fn_captions, collate_fn_classifier, collate_fn_full, augmented_collate_fn
-from models import CaptionGenerator, TripletClassifier, AugmentedCaptionGenerator, FinalModel
+from models import CaptionGenerator, TripletClassifier, AugmentedCaptionGenerator, FinalModel, MultiHeadClassifier
 from train import caption_trainer, classifier_trainer, augmented_caption_trainer, full_pipeline_trainer
 from eval import eval_captions, augmented_eval_captions, eval_classification
 import torch
@@ -95,7 +95,8 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
             val_dataset = RSICDDataset(img_path, graph_path, tripl_path, anno_path, word2idx_path, return_k, split='val')
         
         # copied from main.py
-        model = TripletClassifier(img_dim,len(train_dataset.triplet_to_idx))
+        # model = TripletClassifier(img_dim,len(train_dataset.triplet_to_idx))
+        model = MultiHeadClassifier(img_dim, len(train_dataset.triplet_to_idx))
         trainer = classifier_trainer(model,train_dataset,val_dataset,collate_fn_classifier, network_name)
         trainer.fit(epochs, lr, batch_size)
     elif task == "augmented_tripl2caption":

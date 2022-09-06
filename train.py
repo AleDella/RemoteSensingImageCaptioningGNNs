@@ -7,6 +7,28 @@ import torch
 import dgl
 from graph_utils import get_node_features
 
+
+def multitask_loss(criterion, outputs, targets):
+    '''
+    Function that computes the loss of a multi-head classification problem
+    
+    Args:
+        criterion (torch.nn.Module): loss criterion
+        outputs (torch.Tensor): outputs of the network (batch_size, number_of_tasks, labels_tasks)
+        targets (torch.Tensor): targtet labels for each task (batch_szie, number_of_tasks)
+        
+    Return:
+        losses (torch.Tensor): losses for each task (1, batch_size)
+    '''
+    
+    losses = torch.hstack([
+      criterion(t_input, t_target.long().flatten().clone().detach())
+      for t_input, t_target in zip(outputs, targets)
+    ])
+    
+    return losses
+
+
 class classifier_trainer():
     '''
     Class to train the classifier of triplets on a dataset.
@@ -29,7 +51,7 @@ class classifier_trainer():
         trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
         valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx))
         # Define the criterion
-        criterion = nn.BCEWithLogitsLoss(reduction='mean')
+        criterion = nn.CrossEntropyLoss()
         # Define the optimizer
         optimizer = optim.SGD(self.model.parameters(), lr=learning_rate)
         
@@ -48,14 +70,18 @@ class classifier_trainer():
                 images = images.to(self.device)
                 triplets = triplets.to(self.device)
                 outputs = self.model(images)
-                loss = criterion(outputs,triplets)
+                # Reshape with the right size
+                outputs = outputs.reshape((outputs.shape[0], int(outputs.shape[1]/2), 2))
+                # Now must create the loss function
+                loss = multitask_loss(criterion, outputs, triplets).mean()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 # Calculate accuracy on training
                 outputs = torch.sigmoid(outputs)
-                outputs[outputs>=0.5] = 1
-                outputs[outputs<0.5] = 0
+                # outputs[outputs>=0.5] = 1
+                # outputs[outputs<0.5] = 0
+                outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
                 accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
                 accuracy_train += accuracy
                 epoch_loss_train+=loss.item()
@@ -67,11 +93,15 @@ class classifier_trainer():
                     images = images.to(self.device)
                     triplets = triplets.to(self.device)
                     outputs = self.model(images)
-                    loss = criterion(outputs,triplets)
+                    # Reshape with the right size
+                    outputs = outputs.reshape((outputs.shape[0], int(outputs.shape[1]/2), 2))
+                    # Now must create the loss function
+                    loss = multitask_loss(criterion, outputs, triplets).mean()
                     # Calculate accuracy on training
                     outputs = torch.sigmoid(outputs)
-                    outputs[outputs>=0.5] = 1
-                    outputs[outputs<0.5] = 0
+                    # outputs[outputs>=0.5] = 1
+                    # outputs[outputs<0.5] = 0
+                    outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
                     accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
                     accuracy_val += accuracy
                     epoch_loss_val+=loss.item()

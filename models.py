@@ -133,7 +133,52 @@ class AugmentedCaptionGenerator(nn.Module):
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
     
+
+
+class MultiHead(torch.nn.Module):
+    '''
+    Class for the multihead classifier for the triplet prediction
     
+    Args:
+        backbone (torch.nn.Module): backbone for the images
+        heads List[torch.nn.Module]: list of heads for the tasks
+    '''
+    def __init__(self, backbone, heads):
+        super().__init__()
+        self.backbone = backbone
+        # Initializing all the heads as part of a ModuleList
+        self.heads = torch.nn.ModuleList(heads)
+
+    def forward(self, x):
+        common_features = self.backbone(x)  # compute the shared features
+        outputs = [head(common_features) for head in self.heads]
+        outputs = torch.cat(outputs, dim=1)
+        return outputs
+
+
+class MultiHeadClassifier(nn.Module):
+    
+    def __init__(self, input_size, dict_size):
+        super(MultiHeadClassifier, self).__init__()
+        self.input_size = input_size
+        weights = ResNet152_Weights.DEFAULT
+        self.backbone = resnet152(weights=weights)
+        self.preprocess = weights.transforms()
+        classifiers = [torch.nn.Linear(2048, 2) for _ in range(dict_size)]
+        self.backbone.fc = MultiHead(torch.nn.Identity(), classifiers)
+        # Freeze all the layers except the fully connected
+        for name, parameter in self.backbone.named_parameters():
+            if(not 'fc' in name):
+                parameter.requires_grad = False
+        
+    def forward(self, img):
+        
+        assert img.shape[2]==self.input_size
+        assert img.shape[3]==self.input_size
+        
+        features = self.backbone(self.preprocess(img))
+        
+        return features
     
 
 # WIP
