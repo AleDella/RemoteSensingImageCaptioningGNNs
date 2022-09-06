@@ -18,7 +18,10 @@
 <li> <code> --test </code>: do the run in test mode (currently implemented only with "tripl2caption")</li>
 <li> <code> --o </code>: name of the file with the results of the testing</li>
 
-## To Do (ordered in priority):
+# TODO LIST 
+- [ ] do the dictionary of the captions for UCM and RSICD (key: image_id, value: caption, list of tokens)
+- [ ] do the complete pipeline (from image to caption) train and validation 
+- [ ] performance of the triplet classifier
+- [ ] Begin the presentation (introduction to GNN)
 
-<li> do the evaluation for the classification part (Maybe)</li>
-<li> do the train/eval for the whole pipeline (Maybe) </li>
+

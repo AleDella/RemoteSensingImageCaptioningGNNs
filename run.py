@@ -4,7 +4,7 @@ from maingnn import train_gnn, test_gnn
 
 parser = argparse.ArgumentParser(description="Extract triplets from dataset's captions.")
 parser.add_argument('--dataset', type=str,            default='ucm',           required=False, help='Name of the dataset of which you want to create the triplets.')
-parser.add_argument('--task',    type=str,            default='tripl2caption', required=True,  help='Name of the selected task. Possible ones: "tripl2caption", "img2tripl", "img2caption"') 
+parser.add_argument('--task',    type=str,            default='tripl2caption', required=True,  help='Name of the selected task. Possible ones: "tripl2caption", "img2tripl", "img2caption", "augmented_tripl2caption"') 
 parser.add_argument('--e',       type=int,            default=10,              required=False, help='Number of Epochs.')
 parser.add_argument('--lr',      type=float,          default=0.0001,          required=False, help='Learning rate.')
 parser.add_argument('--bs',      type=int,            default=8,               required=False, help='Batch size.')
@@ -16,7 +16,8 @@ parser.add_argument('--test',    action='store_true',                          r
 parser.add_argument('--o',       type=str,            default="captions.json", required=False, help='Name of the file for captions.')
 parser.add_argument('--gnn',     type=str,            default="gat",           required=False, help='Type of graph neural network to use.')
 parser.add_argument('--vir',     action='store_true',                          required=False, help='If True, use virtual node.')
-parser.add_argument('--depth',       type=int,            default=1,               required=False, help='Depth of the GNN.')
+parser.add_argument('--depth',   type=int,            default=1,               required=False, help='Depth of the GNN.')
+parser.add_argument('--attr',    action='store_true',                          required=False, help='If True, use virtual node.')
 
 
 if __name__=="__main__":
@@ -43,5 +44,6 @@ if __name__=="__main__":
                 args.thresh,
                 args.gnn,
                 args.vir,
-                args.depth
+                args.depth,
+                args.attr
                 )

@@ -3,6 +3,7 @@ import sng_parser
 from gensim.models import Word2Vec
 import torch
 import json
+import dgl
 
 def extract_encoding(sentences):
     '''
@@ -40,7 +41,7 @@ def extract_encoding(sentences):
 
 
 
-def create_feats(sentences, save_feats=False, save_model=False, loaded_model=None, tokenize=False):
+def create_feats(sentences, save_model=False, loaded_model=None, tokenize=False, attributes=False):
     '''
     Extract the features for the relevant words in the caption. 
     NB: "relevant" means that are the labels of nodes and edges of the scene graphs
@@ -51,6 +52,7 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
         save_model: if True, saves the word2vec model in the same folder (Default False)
         loaded_model: if not None, load the word2vec model indicated in the specified path (Default None)
         tokenize: if True, returns the tokenized sentences using entities of the graph
+        attributes: if True, each node of the graph is formed by the head with attributes
     
     Return:
         model: the word2vec model
@@ -63,9 +65,14 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
         # Get the tokenization like in the graph
         sentence = []
         for rel in g['relations']:
-            sentence.append(g['entities'][rel['subject']]['head'])
-            sentence.append(rel['relation'])
-            sentence.append(g['entities'][rel['object']]['head'])
+            if attributes:
+                sentence.append(g['entities'][rel['subject']]['lemma_span'])
+                sentence.append(rel['relation'])
+                sentence.append(g['entities'][rel['object']]['lemma_span'])
+            else:
+                sentence.append(g['entities'][rel['subject']]['head'])
+                sentence.append(rel['relation'])
+                sentence.append(g['entities'][rel['object']]['head'])
         final_input.append(sentence)
     print("Final input: ", final_input)
     # Train word2vec on the sentences for the embeddings
@@ -80,10 +87,6 @@ def create_feats(sentences, save_feats=False, save_model=False, loaded_model=Non
     if save_model:
         print("Saving word2vec model...")
         model.save('word2vecUAV.bin')
-    
-    if save_feats:
-        print("Saving features of the words in the captions...")
-        # TBI
 
     if tokenize:
         return final_input
@@ -127,9 +130,13 @@ def decode_output(out, idx2word):
         for i, id in enumerate(sent):
             sentences[j][i] = idx2word[id]
     try:
-        sentences = [sent[:sent.index('<eos>')+1] for sent in sentences]
+        sentences = [sent[:sent.index("<eos>")+1] for sent in sentences]
     except:
-        sentences = [sent[:sent.index('<pad>')] for sent in sentences]
+        try:
+            sentences = [sent[:sent.index("<pad>")] for sent in sentences]
+        except:
+            print(sentences)
+        
     
     return sentences
 
@@ -170,6 +177,81 @@ def polish_triplets(triplets):
             new_tripl[id] = final_tripl
     
     return new_tripl, discarded_ids
+
+
+def arrange_triplet_file(json_name):
+    '''
+    Function that creates the Triplet_to_idx and discarded image sections; in addition, keeps only unique triplets.
+    (Mainly used for UCM)
+    '''
+    triplets = load_json(json_name)
+    new_triplets = {}
+    disc_ids = []
+    for split in list(triplets.keys()):
+        if str(split) != 'Triplet_to_idx':
+            tmp, dsc = polish_triplets(triplets[split])
+            new_triplets[split] = tmp
+            disc_ids.append(dsc)
+    disc_ids = [id for s in disc_ids for id in s]
+    new_triplets['discarded_images'] = disc_ids
+    new_triplets['Triplet_to_idx'] = triplets['Triplet_to_idx']
+    with open(json_name, 'w') as f:
+        json.dump(new_triplets, f)
+
+# WIP
+def tripl2graph(triplets, model, tokenizer):
+    '''
+    Function that creates and extracts the graph from the triplets
+    
+    Args:
+        triplets List[List]: list of lists of triplets
+        model (torch.nn.Module): model used for extracting the features from the nodes
+        
+    Return:
+        graph List[dgl.DGLGraph]: list of graphs
+        graph_features List[torch.Tensor]: list of features for each graph
+    '''
+    feats = []
+    graphs = []
+    for sample in triplets:
+        tmp_dict = {}
+        tmp_id = 0
+        tmp_src_ids = []
+        tmp_dst_ids = []
+        tmp_node_feats = []
+        # Extract features from triplets
+        for _, tripl in enumerate(sample):
+            encoded_input = tokenizer(list(tripl), return_tensors='pt', add_special_tokens=False, padding=True)
+            output = model(**encoded_input.to('cuda:0'))
+            print(list(tripl))
+            print(encoded_input)
+            print(output.last_hidden_state.shape)
+            print(output.pooler_output.shape)
+            exit(0)
+            if tripl[0] not in list(tmp_dict.keys()):
+                tmp_dict[tripl[0]]=tmp_id
+                tmp_id+=1
+                tmp_node_feats.append(list(output.pooler_output[0]))
+            if tripl[1] not in list(tmp_dict.keys()):
+                tmp_dict[tripl[1]]=tmp_id
+                tmp_id+=1
+                tmp_node_feats.append(list(output.pooler_output[1]))
+            if tripl[2] not in list(tmp_dict.keys()):
+                tmp_dict[tripl[2]]=tmp_id
+                tmp_id+=1
+                tmp_node_feats.append(list(output.pooler_output[2]))
+            
+            # Create source and destination lists
+            tmp_src_ids.append(tmp_dict[tripl[0]])
+            tmp_dst_ids.append(tmp_dict[tripl[1]])
+            tmp_src_ids.append(tmp_dict[tripl[1]])
+            tmp_dst_ids.append(tmp_dict[tripl[2]])
+        
+        graphs.append(dgl.graph((tmp_src_ids, tmp_dst_ids)))
+        print(graphs)
+        print(sample)
+        exit(0)
+        feats.append(torch.Tensor(tmp_node_feats).numpy().tolist())
 
 
 def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:

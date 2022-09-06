@@ -50,23 +50,13 @@ class GNN(nn.Module):
         super(GNN, self).__init__()
         self.conv1 = GATLayer(in_feats, 8)
         self.conv2 = GATLayer(in_feats, 8)
-        # # Added a message passing
-        # self.conv3 = GATLayer(in_feats, 8)
-        # self.conv1 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
-        # self.conv2 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
-        # self.conv3 = dgl.nn.GINConv(torch.nn.Linear(in_feats, in_feats), 'mean')
         self.pooling = dgl.nn.GlobalAttentionPooling(torch.nn.Linear(in_feats, 1))
-        # self.conv1 = dgl.nn.GATConv((in_feats, h_feats), 8, 8, feat_drop=0.2, allow_zero_in_degree=True)
-        # self.conv2 = dgl.nn.GATConv((h_feats, h_feats), 8, 8, feat_drop=0.2, allow_zero_in_degree=True)
-
+        
     def forward(self, g, in_feat):
         # Perform graph convolution and activation function.
         h = F.relu(self.conv1(g, in_feat))
         h = F.relu(self.conv2(g, h))
-        # h = F.relu(self.conv3(g, h))
-        # g.ndata['h'] = h
-        # Calculate graph representation by averaging all the node representations.
-        # hg = dgl.mean_nodes(g, 'h')
+        
         return self.pooling(g, h)
 
 class MLAPModel(nn.Module):
@@ -76,7 +66,8 @@ class MLAPModel(nn.Module):
             vir: bool,
             dim_feat: int,
             depth: int,
-            dropout: bool=True
+            dropout: bool=True,
+            parallels: int = 3
     ):
         super().__init__()
 
@@ -85,6 +76,7 @@ class MLAPModel(nn.Module):
         self._res = res
         self._vir = vir
         self._dropout = dropout
+        self.parallels = parallels
 
         self.layers = nn.ModuleList([GATLayer(dim_feat, 3) for _ in range(depth)])
         
@@ -113,6 +105,7 @@ class MLAPModel(nn.Module):
             )) for _ in range(self._depth)]
         )
         
+                
 
     def forward(self, graph, feat):
         self._graph_embs = []
@@ -185,28 +178,22 @@ class LSTMDecoder(nn.Module):
         self.vocab_bias = nn.Parameter(torch.zeros(len(vocab2idx)))
 
     def forward(self, graph: dgl.DGLGraph, feats: torch.Tensor, labels: any):
-        # print("labels: {}\n".format(labels))
         if self.training:
             # teacher forcing
-            # batched_label = torch.vstack([_encode_seq_to_arr(label, self._vocab2idx, self._max_seq_len - 1) for label in labels])
             batched_label = labels
             batched_label = torch.hstack((torch.zeros((graph.batch_size, 1), dtype=torch.int64), batched_label))
             true_emb = self.vocab_encoder(batched_label.to(device=graph.device))
-        # h_t, c_t = feats[-1].clone(), feats[-1].clone()
         h_t, c_t = feats.clone(), feats.clone()
-        # feats = feats.transpose(0, 1)  # (batch_size, L + 1, dim_feat)
         out = []
         pred_emb = self.vocab_encoder(torch.zeros((graph.batch_size), dtype=torch.int64, device=graph.device))
 
         vocab_mat = self.vocab_encoder(torch.arange(len(self._vocab2idx), dtype=torch.int64, device=graph.device))
         
-        # for i in range(self._max_seq_len-1):
         if self.training:
             max = true_emb.size(1)
         else:
             max = pred_emb.size(1)
         for i in range(max-1):
-            # print("HT: {}\tFeats: {}\tTrue Emb: {}\tPred Emb: {}\tMax seq len: {}\t i: {}\n".format(h_t.shape, feats.shape, true_emb.shape, pred_emb.shape, self._max_seq_len, i))
             if self.training:
                 _in = true_emb[:, i]
             else:

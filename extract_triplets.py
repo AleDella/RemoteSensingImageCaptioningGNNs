@@ -12,16 +12,20 @@ def extract_ent(sentences):
         g = sng_parser.parse(sentence['raw'])
         # Get the tokenization like in the graph
         for rel in g['relations']:
-            final_input.append((g['entities'][rel['subject']]['head'], rel['relation'], g['entities'][rel['object']]['head']))
+            final_input.append((g['entities'][rel['subject']]['lemma_span'], rel['relation'], g['entities'][rel['object']]['lemma_span']))
     return final_input
 
 def extract_triplets(sentence):
+    
+    sentence = ' '.join(sentence)
     # Extract triplets from one sentence
     final_input = []
     g = sng_parser.parse(sentence)
+    
     # Get the tokenization like in the graph
     for rel in g['relations']:
-        final_input.append((g['entities'][rel['subject']]['head'], rel['relation'], g['entities'][rel['object']]['head']))
+        final_input.append((g['entities'][rel['subject']]['lemma_span'], rel['relation'], g['entities'][rel['object']]['lemma_span']))
+    
     return final_input
 
 def readfile(path):
@@ -41,20 +45,17 @@ def rsicd(path_rsicd, json_name):
 
     for img in anno:
         tripl = list(set(extract_ent(img['sentences'])))
-        # if tripl not in final_labels:
-        #     final_labels.append(tripl)
         if tripl!=[]:
             try:
                 final_file[img['split']][img['imgid']].append(tripl)
             except:
                 final_file[img['split']][img['imgid']] = tripl
         else:
-            final_file['discarded_images'].append(img['filename'])    
+            final_file['discarded_images'].append(img['filename'])
 
     with open(json_name, "w") as outfile:
         json.dump(final_file, outfile)
 
-# print("Total number of unique triplets found: ", len(final_labels))
 
 
 
@@ -103,22 +104,22 @@ def ucm(path_annots, train, test, val, json_name):
     all_triplets = []
     for annot in tqdm(annotations):
         image = annot.split(" ")[0]
-        triplets = extract_triplets(annot)
+        triplets = extract_triplets(annot.split(" ")[1:])
         if(image in train_list):
             try:
                 final_file["train"][image].append(triplets)
             except:
-                final_file["train"][image] = triplets
+                final_file["train"][image] = [triplets]
         elif(image in test_list):
             try:
                 final_file["test"][image].append(triplets)
             except:
-                final_file["test"][image] = triplets
+                final_file["test"][image] = [triplets]
         elif(image in val_list):
             try:
                 final_file["val"][image].append(triplets)
             except:
-                final_file["val"][image] = triplets
+                final_file["val"][image] = [triplets]
         else:
             raise Exception("Something went wrong, find an image not assigned to any of train test or val splits")     
         
