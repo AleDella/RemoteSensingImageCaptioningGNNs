@@ -236,19 +236,18 @@ class FinalModel(nn.Module):
         # Add the create the graph from the triplets
         # Da una triplet devo produrre un grafo con delle features, è meglio farlo in una funzione
         graph, graph_feats = tripl2graph(triplets, self.feature_encoder, self.tokenizer)
-        print(triplets)
-        exit(0)
         i_feats = self.img_encoder(img)
         
-        graph_feats = self.dropout(self.encoder(g, g_feats))
+        graph_feats = self.dropout(self.encoder(graph, graph_feats))
         mod_feats = graph_feats + (i_feats * self.img_weight)
         
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
-        if self.decoder_type == 'lstm':
-            decoded_out = self.decoder(g, mod_feats, labels)
-        if self.decoder_type == 'rnn':
-            decoded_out = self.decoder(mod_feats, labels)
+        # Need to solve the problem with lstm and rnn for the labels
+        # if self.decoder_type == 'lstm':
+        #     decoded_out = self.decoder(graph, mod_feats, labels)
+        # if self.decoder_type == 'rnn':
+        #     decoded_out = self.decoder(mod_feats, labels)
         return decoded_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:

@@ -370,14 +370,11 @@ class full_pipeline_trainer():
             epoch_loss_val = 0
             print('Epoch: '+str(epoch))
             for i, data in enumerate(tqdm(trainloader)):
-                _, images, triplets, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
-                # graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(self.device)
-                # feats = get_node_features(node_feats, sum(num_nodes)).to(self.device)
+                _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                 images = images.to(self.device)
                 triplets = triplets.to(self.device)
-                # NB This is the right input but I need to have the forward produce the graph and produce the features.
-                # --> add BERT to the model or add a function that uses BERT for the features or create a dictionary for mapping the features. (The last one is better)
                 outputs = self.model(images)
+                loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                 optimizer.zero_grad()
                 loss = criterion(outputs,triplets)
                 loss.backward()
@@ -387,11 +384,11 @@ class full_pipeline_trainer():
             with torch.no_grad():
                 self.model.eval()
                 for j, data in enumerate(tqdm(valloader)):
-                    images, triplets = data
+                    _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                     images = images.to(self.device)
                     triplets = triplets.to(self.device)
                     outputs = self.model(images)
-                    loss = criterion(outputs,triplets)
+                    loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                     epoch_loss_val+=loss.item()
                     
             
