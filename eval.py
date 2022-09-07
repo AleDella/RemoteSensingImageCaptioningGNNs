@@ -7,6 +7,7 @@ import json
 from functools import partial
 from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full
 from numpy import argmax
+from torchmetrics.functional import f1_score
 
 
 
@@ -79,7 +80,7 @@ def augmented_eval_captions(dataset, model, filename):
         json.dump(result, outfile)
 
 
-def eval_classification(dataset, model, filename):
+def eval_classification(dataset, model, filename, verbose=False):
     '''
     Function that tests a model
     
@@ -106,23 +107,25 @@ def eval_classification(dataset, model, filename):
             images = images.to(device)
             triplets = triplets.to(device)
             outputs = model(images)
+            # Reshape with the right size
             outputs = outputs.reshape((outputs.shape[0], int(outputs.shape[1]/2), 2))
+            # Calculate accuracy on training
             outputs = torch.sigmoid(outputs)
-            # outputs[outputs>=0.5] = 1
-            # outputs[outputs<0.5] = 0
             outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
-            accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
-            outputs = outputs.squeeze()
-            outputs = outputs.nonzero().squeeze()
-            triplets = triplets.squeeze()
-            triplets = triplets.nonzero().squeeze()
-            print('True triplets')
-            for i in range(triplets.shape[0]):
-                print(idx2triplet[triplets[i].item()])
-            print('Predicted triplets')
-            for i in range(outputs.shape[0]):
-                print(idx2triplet[outputs[i].item()])
-            break
+            accuracy = f1_score(outputs, triplets.long(), num_classes=2, mdmc_average='global')
+            
+            
+            outputs = outputs.nonzero()
+            triplets = triplets.nonzero()
+            
+            if(True):
+                print('True triplets')
+                for i in range(triplets.shape[0]):
+                    print(idx2triplet[triplets[i][1].item()])
+                print('Predicted triplets')
+                for i in range(outputs.shape[0]):
+                    print(idx2triplet[outputs[i][1].item()])
+                    
             accuracy_test += accuracy
     
     print('Test accuracy: {:.3f}'.format(accuracy_test/i))

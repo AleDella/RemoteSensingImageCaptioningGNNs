@@ -1,4 +1,5 @@
 from torch.utils.data import DataLoader
+from torchmetrics.functional import f1_score
 from functools import partial
 import torch.nn as nn
 from tqdm import tqdm
@@ -79,10 +80,8 @@ class classifier_trainer():
                 optimizer.step()
                 # Calculate accuracy on training
                 outputs = torch.sigmoid(outputs)
-                # outputs[outputs>=0.5] = 1
-                # outputs[outputs<0.5] = 0
                 outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
-                accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
+                accuracy = f1_score(outputs, triplets.long(), num_classes=2, mdmc_average='global')
                 accuracy_train += accuracy
                 epoch_loss_train+=loss.item()
             
@@ -99,10 +98,9 @@ class classifier_trainer():
                     loss = multitask_loss(criterion, outputs, triplets).mean()
                     # Calculate accuracy on training
                     outputs = torch.sigmoid(outputs)
-                    # outputs[outputs>=0.5] = 1
-                    # outputs[outputs<0.5] = 0
                     outputs = torch.tensor([[torch.argmax(task).item() for task in sample ] for sample in outputs]).to(outputs.device)
-                    accuracy = torch.sum(outputs==triplets).item()/(triplets.shape[0]*triplets.shape[1])
+                    
+                    accuracy = f1_score(outputs, triplets.long(), num_classes=2, mdmc_average='global')
                     accuracy_val += accuracy
                     epoch_loss_val+=loss.item()
                     
