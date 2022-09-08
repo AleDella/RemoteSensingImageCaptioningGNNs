@@ -132,36 +132,34 @@ def eval_classification(dataset, model, filename, verbose=False):
         
         
         
-# def eval_pipeline(dataset, model, filename):
-#     '''
-#     Function that tests a model
+def eval_pipeline(dataset, model, filename):
+    '''
+    Function that tests a model
     
-#     Args:
-#         dataset (torch.utils.data.Dataset): dataset to use for testing.
-#         model (torch.nn.Module): model to test on the dataset
-#         filename (str): name of the file in which the captions are saved
+    Args:
+        dataset (torch.utils.data.Dataset): dataset to use for testing.
+        model (torch.nn.Module): model to test on the dataset
+        filename (str): name of the file in which the captions are saved
     
-#     Return:
-#         None
-#     '''
-#     testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_full, word2idx=dataset.word2idx, training=True))
-#     # Set the correct device
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     model = model.to(device)
-#     # Create the conversion id -> token
-#     idx2word = {v: k for k, v in dataset.word2idx.items()}
-#     with torch.no_grad():
-#         model.eval()
-#         result = {}
-#         for _, data in enumerate(tqdm(testloader)):
-#             ids, images, triplet_tensor, captions, encoded_captions, src_ids, dst_ids, node_feats, num_nodes = data
-#             graphs = dgl.batch([dgl.graph((src_id, dst_id)) for src_id, dst_id in zip(src_ids, dst_ids)]).to(device)
-#             feats = get_node_features(node_feats, sum(num_nodes)).to(device)
-#             img = images.to(device)
-#             outputs = model(graphs, feats, img, encoded_captions)
-#             decoded_outputs = decode_output(outputs, idx2word)
-#             for i, id in enumerate(ids):
-#                 result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
+    Return:
+        None
+    '''
+    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_full, triplet_to_idx=dataset.triplet_to_idx, word2idx=dataset.word2idx, training=True))
+    # Set the correct device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    # Create the conversion id -> token
+    idx2word = {v: k for k, v in dataset.word2idx.items()}
+    with torch.no_grad():
+        model.eval()
+        result = {}
+        for _, data in enumerate(tqdm(testloader)):
+            ids, images, _, _, _, _, _, _, _ = data
+            images = images.to(device)
+            outputs = model(images)
+            decoded_outputs = decode_output(outputs, idx2word)
+            for i, id in enumerate(ids):
+                result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
-#     with open(filename, "w") as outfile:
-#         json.dump(result, outfile)
+    with open(filename, "w") as outfile:
+        json.dump(result, outfile)

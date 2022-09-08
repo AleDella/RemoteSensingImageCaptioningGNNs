@@ -30,7 +30,8 @@ if __name__=="__main__":
                 args.o,
                 args.gnn,
                 args.vir,
-                args.depth
+                args.depth,
+                args.attr
                 )
     else:
         train_gnn(args.dataset,

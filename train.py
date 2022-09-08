@@ -325,8 +325,7 @@ class augmented_caption_trainer():
         else:
             torch.save(self.model,self.save_path)
             
-            
-# WIP 
+
 class full_pipeline_trainer():
     '''
     Class to train full pipeline on a dataset.

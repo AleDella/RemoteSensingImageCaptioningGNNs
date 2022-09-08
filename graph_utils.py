@@ -198,7 +198,6 @@ def arrange_triplet_file(json_name):
     with open(json_name, 'w') as f:
         json.dump(new_triplets, f)
 
-# WIP
 
 def tripl2list(tripl):
     '''
