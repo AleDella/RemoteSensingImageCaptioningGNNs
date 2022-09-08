@@ -20,7 +20,7 @@
 
 # TODO LIST 
 - [X] do the dictionary of the captions for UCM and RSICD (key: image_id, value: caption, list of tokens)
-- [ ] do the complete pipeline (from image to caption) train and validation 
+- [X] do the complete pipeline (from image to caption) train and validation 
 - [X] performance of the triplet classifier
 - [ ] find a method to improve classifier
 - [ ] Begin the presentation (introduction to GNN)
