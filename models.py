@@ -233,19 +233,18 @@ class FinalModel(nn.Module):
         for s in triplets:
             if s == []:
                 s.append("('There', 'is', 'no triplet')")
-        # Add the create the graph from the triplets
-        # Da una triplet devo produrre un grafo con delle features, è meglio farlo in una funzione
+        
+        # Retrieve the graph and graph features
         graph, graph_feats = tripl2graph(triplets, self.feature_encoder, self.tokenizer)
         i_feats = self.img_encoder(img)
-        
-        graph_feats = self.dropout(self.encoder(graph, graph_feats))
+        graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
+        graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
         mod_feats = graph_feats + (i_feats * self.img_weight)
-        
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
         # Need to solve the problem with lstm and rnn for the labels
-        # if self.decoder_type == 'lstm':
-        #     decoded_out = self.decoder(graph, mod_feats, labels)
+        if self.decoder_type == 'lstm':
+            decoded_out = self.decoder(graph, mod_feats, labels)
         # if self.decoder_type == 'rnn':
         #     decoded_out = self.decoder(mod_feats, labels)
         return decoded_out

@@ -199,6 +199,22 @@ def arrange_triplet_file(json_name):
         json.dump(new_triplets, f)
 
 # WIP
+
+def tripl2list(tripl):
+    '''
+    Support function for tripl2graph()
+    '''
+    tripl = tripl.replace('(', '')
+    tripl = tripl.replace(')', '')
+    tripl = tripl.replace(',', '')
+    tripl = tripl.replace("'", '')
+    tripl = tripl.split(' ')
+    return tripl
+
+
+
+
+
 def tripl2graph(triplets, model, tokenizer):
     '''
     Function that creates and extracts the graph from the triplets
@@ -221,13 +237,8 @@ def tripl2graph(triplets, model, tokenizer):
         tmp_node_feats = []
         # Extract features from triplets
         for _, tripl in enumerate(sample):
-            encoded_input = tokenizer(list(tripl), return_tensors='pt', add_special_tokens=False, padding=True)
+            encoded_input = tokenizer(tripl2list(tripl), return_tensors='pt', add_special_tokens=False, padding=True)
             output = model(**encoded_input.to('cuda:0'))
-            print(list(tripl))
-            print(encoded_input)
-            print(output.last_hidden_state.shape)
-            print(output.pooler_output.shape)
-            exit(0)
             if tripl[0] not in list(tmp_dict.keys()):
                 tmp_dict[tripl[0]]=tmp_id
                 tmp_id+=1
@@ -247,12 +258,21 @@ def tripl2graph(triplets, model, tokenizer):
             tmp_src_ids.append(tmp_dict[tripl[1]])
             tmp_dst_ids.append(tmp_dict[tripl[2]])
         
-        graphs.append(dgl.graph((tmp_src_ids, tmp_dst_ids)))
-        print(graphs)
-        print(sample)
-        exit(0)
-        feats.append(torch.Tensor(tmp_node_feats).numpy().tolist())
-
+        g = dgl.graph((tmp_src_ids, tmp_dst_ids))
+        f = torch.Tensor(tmp_node_feats)
+        graphs.append(g)
+        feats.append(f)
+    
+    g = dgl.batch(graphs)
+    new_feats = torch.zeros((g.num_nodes(), feats[0].size(1)))
+    i = 0
+    for ft in feats:
+        for f in ft:
+            new_feats[i] = f
+            i+=1
+        
+    return g, new_feats
+    
 
 def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
     '''
