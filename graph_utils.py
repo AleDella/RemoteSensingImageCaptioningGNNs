@@ -315,6 +315,35 @@ def load_json(path):
     return data
 
 
+def bleuFormat(filename):
+    '''
+    Function that converts the output json produced by the testing; into an
+    approriate format for BLEU scoring
+    
+    Args:
+        filename (str): name of the json
+    '''
+    ucm = load_json(filename)
+    def renew(data):
+        new_data = {} 
+        for k,v in data.items():
+            caption = v['caption ']
+            try:
+                while True:
+                    caption.remove('<sos>')
+            except ValueError:
+                pass
+            try:
+                caption.remove('<eos>')
+            except:
+                pass
+            new_data[k] = caption
+        return new_data
+    ucm = renew(ucm)
+    with open(filename) as f:
+        json.dump(ucm, f)
+
+
 def load_graph_data(graph_path, split):
     '''
     Function to load all the graph data taken from json format

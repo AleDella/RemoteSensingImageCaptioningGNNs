@@ -367,7 +367,7 @@ class full_pipeline_trainer():
             for i, data in enumerate(tqdm(trainloader)):
                 _, images, _, captions, encoded_captions, _, _, _, _ = data
                 images = images.to(self.device)
-                outputs = self.model(images)
+                outputs = self.model(images, encoded_captions, True)
                 loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                 optimizer.zero_grad()
                 loss.backward()

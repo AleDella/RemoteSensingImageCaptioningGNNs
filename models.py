@@ -221,7 +221,7 @@ class FinalModel(nn.Module):
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
 
-    def forward(self, img):
+    def forward(self, img, labels=None, training=False):
         # Triplet classification
         triplets = self.tripl_classifier(img)
         # Extract indeces greater or equal than the threshold
@@ -239,12 +239,12 @@ class FinalModel(nn.Module):
         i_feats = self.img_encoder(img)
         graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
         graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
-        mod_feats = graph_feats + (i_feats * self.img_weight)
+        mod_feats = i_feats + ( graph_feats * self.img_weight)
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
         # Need to solve the problem with lstm and rnn for the labels
         if self.decoder_type == 'lstm':
-            decoded_out = self.decoder(graph, mod_feats, labels)
+            decoded_out = self.decoder(graph, mod_feats, labels, training)
         # if self.decoder_type == 'rnn':
         #     decoded_out = self.decoder(mod_feats, labels)
         return decoded_out

@@ -177,7 +177,8 @@ class LSTMDecoder(nn.Module):
         self.vocab_encoder = nn.Embedding(len(vocab2idx), dim_feat)
         self.vocab_bias = nn.Parameter(torch.zeros(len(vocab2idx)))
 
-    def forward(self, graph: dgl.DGLGraph, feats: torch.Tensor, labels: any):
+    def forward(self, graph: dgl.DGLGraph, feats: torch.Tensor, labels: any, training: bool):
+        self.training = training
         if self.training:
             # teacher forcing
             batched_label = labels
