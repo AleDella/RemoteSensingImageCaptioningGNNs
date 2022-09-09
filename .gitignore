@@ -10,3 +10,4 @@ model_finetuned.pth
 model.pth
 *.pth
 *.json
+*.csv

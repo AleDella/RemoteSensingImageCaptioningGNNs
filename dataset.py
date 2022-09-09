@@ -258,7 +258,7 @@ class UCMDataset(TripletDataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
-    def __init__(self, image_folder, image_filenames, graph_path, triplets_path, polished_tripl_path, caption_path, word2idx_path, return_keys, split='train'):
+    def __init__(self, image_folder, image_filenames, graph_path, polished_tripl_path, caption_path, word2idx_path, return_keys, split='train'):
         '''
         Args:
             image_folder: path to the folder with all the images
@@ -290,14 +290,12 @@ class UCMDataset(TripletDataset):
                 img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
                 self.images[id] = torch.from_numpy(img.copy())
         
-        # Part using the full triplet file
-        unpolished_data = load_json(triplets_path)
         # FOR TRIPLET CLASSIFICATION
-        self.triplet_to_idx = unpolished_data['Triplet_to_idx']
+        self.triplet_to_idx = polished_data['Triplet_to_idx']
         if split is None:
-            self.triplets = {id:value for (id,value) in unpolished_data.items() if id not in discarded_ids}
+            self.triplets = {id:value for (id,value) in polished_data.items() if id not in discarded_ids}
         else:
-            self.triplets = {id:value for (id,value) in unpolished_data[split].items() if id not in discarded_ids}
+            self.triplets = {id:value for (id,value) in polished_data[split].items() if id not in discarded_ids}
 
         # Captions part
         self.captions = {}
