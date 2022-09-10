@@ -205,9 +205,8 @@ def tripl2list(tripl):
     '''
     tripl = tripl.replace('(', '')
     tripl = tripl.replace(')', '')
-    tripl = tripl.replace(',', '')
     tripl = tripl.replace("'", '')
-    tripl = tripl.split(' ')
+    tripl = tripl.split(',')
     return tripl
 
 
