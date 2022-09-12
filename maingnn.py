@@ -142,10 +142,14 @@ def train_gnn(dataset, task, epochs, lr, batch_size, decoder, network_name, earl
             train_filenames = 'dataset/UCM_dataset/filenames/filenames_train.txt'
             val_filenames = 'dataset/UCM_dataset/filenames/filenames_val.txt'
             img_path = 'dataset/UCM_dataset/images/'
+            # if attributes:
+            #     polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm_attributes.json'
+            # else:
+            #     polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm.json'
             if attributes:
-                polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm_attributes.json'
-            else:
-                polished_tripl_path = 'dataset/UCM_dataset/triplets_ucm.json'
+                polished_tripl_path = 'dataset/UCM_dataset/filtered_triplets_ucm_attributes.json'
+            else:    
+                polished_tripl_path = 'dataset/UCM_dataset/filtered_triplets_ucm.json'
             anno_path = 'dataset/UCM_dataset/filenames/descriptions_UCM.txt'
             word2idx_path = 'dataset/UCM_dataset/caption_dict_UCM.json'
             graph_path = 'dataset/UCM_dataset/Graph_data'

@@ -340,7 +340,7 @@ def bleuFormat(filename):
             new_data[k] = caption
         return new_data
     ucm = renew(ucm)
-    with open(filename) as f:
+    with open(filename, 'w') as f:
         json.dump(ucm, f)
 
 

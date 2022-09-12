@@ -239,7 +239,7 @@ class FinalModel(nn.Module):
         i_feats = self.img_encoder(img)
         graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
         graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
-        mod_feats = i_feats + ( graph_feats * self.img_weight)
+        mod_feats = graph_feats + ( i_feats * self.img_weight)
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
         # Need to solve the problem with lstm and rnn for the labels
