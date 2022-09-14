@@ -8,6 +8,7 @@ from functools import partial
 from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full
 from numpy import argmax
 from torchmetrics.functional import f1_score
+from pycocoevalcap.bleu.bleu import Bleu
 
 
 
@@ -163,3 +164,50 @@ def eval_pipeline(dataset, model, filename):
             
     with open(filename, "w") as outfile:
         json.dump(result, outfile)
+    
+
+def eval_predictions(predictions, ground_truth):
+    '''
+    Function that tests a model
+    Args:
+        list_of_predictions (list): list of predictions
+        list_true (list): list of lists where each element contains the reference ground truth(s)
+    
+    Return:
+        print the bleu scores
+    '''
+    scorers = [
+            (Bleu(4), ["Bleu_1", "Bleu_2", "Bleu_3", "Bleu_4"]),
+        ]
+    for scorer, _ in scorers:
+        score, _ = scorer.compute_score(ground_truth, predictions)
+        score = [str(round(sc*100,2)) for sc in score]
+        for i in range(len(score)):
+            print('BLEU '+str(i))
+            print(score[i])
+    
+    return 
+
+
+if __name__ == "__main__":
+    import json
+    
+    # Load the predictions
+    with open('Results/captions_ucm_filtered.json','r') as file:
+        predictions = json.load(file)
+    
+    for key, value in predictions.items():
+        predictions[key] = [' '.join(value)]
+        
+    # Parse the UCM captions
+    ground_truth_captions = dict()
+    with open('dataset/UCM_dataset/filenames/descriptions_UCM.txt', 'r') as file:
+        for line in file.readlines():
+            pieces = line.split(' ')
+            if(pieces[0] in predictions.keys()):
+                try:
+                    ground_truth_captions[pieces[0]].append(' '.join(pieces[1:]).strip())
+                except:
+                    ground_truth_captions[pieces[0]] = [' '.join(pieces[1:]).strip()]
+        
+    eval_predictions(predictions, ground_truth_captions)
