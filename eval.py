@@ -2,7 +2,7 @@ from torch.utils.data import DataLoader
 import torch
 from tqdm import tqdm
 import dgl
-from graph_utils import decode_output, get_node_features
+from graph_utils import bleuFormat, decode_output, get_node_features
 import json
 from functools import partial
 from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full
@@ -163,7 +163,9 @@ def eval_pipeline(dataset, model, filename):
                 result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
     with open(filename, "w") as outfile:
-        json.dump(result, outfile)
+        json.dump(result, outfile) 
+    # Transform the output in bleu Format for the evaluation
+    bleuFormat(filename)
     
 
 def eval_predictions(predictions, ground_truth):
