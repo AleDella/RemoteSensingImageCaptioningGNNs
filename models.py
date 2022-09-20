@@ -115,7 +115,7 @@ class AugmentedCaptionGenerator(nn.Module):
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
 
-    def forward(self, g, g_feats, img, labels):
+    def forward(self, g, g_feats, img, labels=None):
         i_feats = self.img_encoder(img)
         
         graph_feats = self.dropout(self.encoder(g, g_feats))
@@ -180,8 +180,6 @@ class MultiHeadClassifier(nn.Module):
         
         return features
     
-
-# WIP
 class FinalModel(nn.Module):
     '''
     Caption generation network (encoder-decoder)
@@ -195,7 +193,8 @@ class FinalModel(nn.Module):
     def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, img_dim, tripl2idx, gnn='gat', vir=True, depth=1, decoder='lstm') -> None:
         super(FinalModel, self).__init__()
         self.graph_encoder = GNN(feats_dim)
-        self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
+        self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
+        # self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
         self.idx2tripl = {v: k for k, v in tripl2idx.items()}
         self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -224,6 +223,10 @@ class FinalModel(nn.Module):
     def forward(self, img, labels=None, training=False):
         # Triplet classification
         triplets = self.tripl_classifier(img)
+        # For multihead classifier
+        triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
+        class_out = triplets
+        triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
         # Extract indeces greater or equal than the threshold
         threshold = 0.5
         indeces = [[ i for i, d in enumerate(s) if d >= threshold] for s in triplets ]
@@ -239,7 +242,8 @@ class FinalModel(nn.Module):
         i_feats = self.img_encoder(img)
         graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
         graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
-        mod_feats = graph_feats + ( i_feats * self.img_weight)
+        # mod_feats = graph_feats + ( i_feats * self.img_weight)
+        mod_feats = i_feats + ( graph_feats * self.img_weight)
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
         # Need to solve the problem with lstm and rnn for the labels
@@ -247,7 +251,62 @@ class FinalModel(nn.Module):
             decoded_out = self.decoder(graph, mod_feats, labels, training)
         # if self.decoder_type == 'rnn':
         #     decoded_out = self.decoder(mod_feats, labels)
-        return decoded_out
+        return decoded_out, class_out
+
+    def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
+        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
+        return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+    
+    
+# WIP
+
+class FinetunedModel(nn.Module):
+    '''
+    Caption generation network (encoder-decoder)
+
+    Args:
+        feats_dim: dimension of the features
+        max_seq_len: maximum tokens in a caption
+        vocab2idx: dictionary for one hot encoding of tokens
+        decoder: type of decoder (linear, lstm or rnn)
+    '''
+    def __init__(self, vocab2idx, img_dim, tripl2idx, decoder) -> None:
+        super(FinetunedModel, self).__init__()
+        self.decoder = torch.load(decoder)
+        self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
+        self.idx2tripl = {v: k for k, v in tripl2idx.items()}
+        self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
+        self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+        self.vocab2idx = vocab2idx
+        self.idx2vocab = {v: k for k, v in vocab2idx.items()}
+
+    def forward(self, img):
+        # Triplet classification
+        triplets = self.tripl_classifier(img)
+        # For multihead classifier
+        triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
+        class_out = triplets
+        triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
+        # Extract indeces greater or equal than the threshold
+        threshold = 0.5
+        indeces = [[ i for i, d in enumerate(s) if d >= threshold] for s in triplets ]
+        # Extract the triplets
+        triplets = [[self.idx2tripl[i] for i in s] for s in indeces]
+        # Add "proxy" triplets due to the fact that the network can't process void triplets
+        for s in triplets:
+            if s == []:
+                s.append("('There', 'is', 'no triplet')")
+        
+        # Retrieve the graph and graph features
+        graph, graph_feats = tripl2graph(triplets, self.feature_encoder, self.tokenizer)
+        graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
+        
+        
+        
+        decoded_out = self.decoder(graph, graph_feats, img)
+        
+        
+        return decoded_out, class_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])

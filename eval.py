@@ -79,6 +79,8 @@ def augmented_eval_captions(dataset, model, filename):
             
     with open(filename, "w") as outfile:
         json.dump(result, outfile)
+    
+    bleuFormat(filename)
 
 
 def eval_classification(dataset, model, filename, verbose=False):
@@ -157,8 +159,8 @@ def eval_pipeline(dataset, model, filename):
         for _, data in enumerate(tqdm(testloader)):
             ids, images, _, _, _, _, _, _, _ = data
             images = images.to(device)
-            outputs = model(images)
-            decoded_outputs = decode_output(outputs, idx2word)
+            cap_outputs, _ = model(images)
+            decoded_outputs = decode_output(cap_outputs, idx2word)
             for i, id in enumerate(ids):
                 result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
@@ -195,7 +197,7 @@ if __name__ == "__main__":
     import json
     
     # Load the predictions
-    with open('Results/captions_ucm_filtered.json','r') as file:
+    with open('finetuned_results.json','r') as file:
         predictions = json.load(file)
     
     for key, value in predictions.items():

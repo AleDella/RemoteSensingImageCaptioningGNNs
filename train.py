@@ -359,16 +359,23 @@ class full_pipeline_trainer():
             train_max = float('inf')
             tollerance = 0
         
+        # crit = nn.CrossEntropyLoss()
+        
         for epoch in range(epochs):
             self.model.train()
             epoch_loss_train = 0
             epoch_loss_val = 0
             print('Epoch: '+str(epoch))
             for i, data in enumerate(tqdm(trainloader)):
-                _, images, _, captions, encoded_captions, _, _, _, _ = data
+                _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                 images = images.to(self.device)
-                outputs = self.model(images, encoded_captions, True)
-                loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                cap_outputs, class_outputs = self.model(images, encoded_captions, True)
+                # Loss for both tasks
+                triplets = triplets.to(self.device)
+                class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                # class_loss = crit(class_outputs, triplets)
+                cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                loss = 0.5*cap_loss + 0.5*class_loss
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -377,10 +384,127 @@ class full_pipeline_trainer():
             with torch.no_grad():
                 self.model.eval()
                 for j, data in enumerate(tqdm(valloader)):
-                    _, images, _, captions, encoded_captions, _, _, _, _ = data
+                    _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                     images = images.to(self.device)
-                    outputs = self.model(images)
-                    loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    cap_outputs, class_outputs = self.model(images)
+                    triplets = triplets.to(self.device)
+                    class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                    # class_loss = crit(class_outputs, triplets)
+                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    loss = 0.5*cap_loss + 0.5*class_loss
+                    epoch_loss_val+=loss.item()
+                    
+            
+            print('Training loss: {:.3f}'.format(epoch_loss_train/i))
+            print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+            if early_stopping:
+                if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) and tollerance<tol_threshold :
+                    val_max = epoch_loss_val/j
+                    train_max = epoch_loss_train/i
+                    best_model=self.model
+                else:
+                    tollerance+=1
+                    if tollerance>tol_threshold:
+                        print("Stopped training due to overfit")
+                        break
+                    # Restart from the best checkpoint
+                    self.model = best_model
+        
+        if early_stopping:
+            torch.save(best_model,self.save_path)
+        else:
+            torch.save(self.model,self.save_path)
+            
+            
+            
+class enc_finetuning():
+    '''
+    Class to train full pipeline on a dataset.
+    The dataset should return the image as well as the ground truth triplets which are in the image
+    '''
+    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None):
+        self.model = model
+        self.dataset_train = dataset_train
+        self.dataset_val = dataset_val
+        self.save_path = save_path
+        self.collate_fn = collate_fn
+        self.word2idx = word2idx
+        self.max_capt_length = max_capt_length
+        self.use_cuda = use_cuda
+        if device is None:
+            # Take default cuda:0 
+            device = torch.device("cuda:0")
+        self.device = device
+    
+    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=5):
+        # Define dataloader
+        trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
+        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
+        # Define the optimizer
+        final_layer_weights = []
+        rest_of_the_net_weights = []
+        # final_names = []
+        # rest_names = []
+        # we will iterate through the layers of the network
+        for name, param in self.model.named_parameters():
+            if not name.startswith('feature_encoder'):
+                if name.startswith('tripl_classifier') and 'fc' in name:
+                    final_layer_weights.append(param)
+                    # final_names.append(name)
+                else:
+                    rest_of_the_net_weights.append(param)
+                    # rest_names.append(name)
+        
+        # so now we have divided the network weights into two groups.
+        # We will train the final_layer_weights with learning_rate = lr
+        # and rest_of_the_net_weights with learning_rate = lr / 10
+        
+        optimizer = torch.optim.AdamW([
+            {'params': rest_of_the_net_weights},
+            {'params': final_layer_weights, 'lr': learning_rate}
+        ], lr=learning_rate / 10)
+        
+        if(self.use_cuda):
+            self.model = self.model.to(self.device)
+        # Early stopping
+        if early_stopping:
+            val_max = float('inf')
+            train_max = float('inf')
+            tollerance = 0
+        
+        # crit = nn.CrossEntropyLoss()
+        
+        for epoch in range(epochs):
+            self.model.train()
+            epoch_loss_train = 0
+            epoch_loss_val = 0
+            print('Epoch: '+str(epoch))
+            for i, data in enumerate(tqdm(trainloader)):
+                _, images, triplets, captions, encoded_captions, _, _, _, _ = data
+                images = images.to(self.device)
+                cap_outputs, class_outputs = self.model(images)
+                # Loss for both tasks
+                triplets = triplets.to(self.device)
+                class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                # class_loss = crit(class_outputs, triplets)
+                cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                loss = 0.5*cap_loss + 0.5*class_loss
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                epoch_loss_train+=loss.item()
+            
+            with torch.no_grad():
+                self.model.eval()
+                for j, data in enumerate(tqdm(valloader)):
+                    _, images, triplets, captions, encoded_captions, _, _, _, _ = data
+                    images = images.to(self.device)
+                    cap_outputs, class_outputs = self.model(images)
+                    triplets = triplets.to(self.device)
+                    class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                    # class_loss = crit(class_outputs, triplets)
+                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    loss = 0.5*cap_loss + 0.5*class_loss
                     epoch_loss_val+=loss.item()
                     
             

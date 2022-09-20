@@ -80,7 +80,7 @@ def RSICD_tripl2graph(triplets_path, model, tokenizer):
             
             
 # This is a temporary version due to the changes introduced with the RSICD dataset
-def UCM_tripl2graph(triplets_path, model, tokenizer):
+def UCM_tripl2graph(triplets_path, model, tokenizer, dataset):
     '''
     Function that extract DGLGraph data from triplets and puts them into files
     
@@ -91,53 +91,54 @@ def UCM_tripl2graph(triplets_path, model, tokenizer):
     Return:
         None
     '''
+    
+    try:
+        triplets = load_json(triplets_path+'/'+'triplets'+dataset+'.json')
+    except:
+        print("No triplets file for {} split".format(dataset))
+        exit(0)
     splits = ['train', 'val', 'test']
     for split in splits:
         split_time = time.time()
-        try:
-            triplets = load_json(triplets_path+'/'+'polished_triplets_'+split+'.json')
-        except:
-            print("No triplets file for {} split".format(split))
-            exit(0)
-        caption_tripl, discarded_ids = triplets['tripl'], triplets['discarded_ids']
+        # caption_tripl, discarded_ids = triplets['tripl'], triplets['discarded_ids']
+        caption_tripl = triplets[split]
         node_feats = {}
         num_nodes = {}
         src_ids = {}
         dst_ids = {}
         # Here to check what happen when split is not passed
         for id in caption_tripl:
-            if id not in discarded_ids:
-                tmp_dict = {}
-                tmp_id = 0
-                tmp_src_ids = []
-                tmp_dst_ids = []
-                tmp_node_feats = []
-                # Extract features from triplets
-                for _, tripl in enumerate(caption_tripl[id]):
-                    encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
-                    output = model(**encoded_input)
-                    if tripl[0] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[0]]=tmp_id
-                        tmp_id+=1
-                        tmp_node_feats.append(list(output.pooler_output[0]))
-                    if tripl[1] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[1]]=tmp_id
-                        tmp_id+=1
-                        tmp_node_feats.append(list(output.pooler_output[1]))
-                    if tripl[2] not in list(tmp_dict.keys()):
-                        tmp_dict[tripl[2]]=tmp_id
-                        tmp_id+=1
-                        tmp_node_feats.append(list(output.pooler_output[2]))
-                    
-                    # Create source and destination lists
-                    tmp_src_ids.append(tmp_dict[tripl[0]])
-                    tmp_dst_ids.append(tmp_dict[tripl[1]])
-                    tmp_src_ids.append(tmp_dict[tripl[1]])
-                    tmp_dst_ids.append(tmp_dict[tripl[2]])
-                src_ids[id] = tmp_src_ids
-                dst_ids[id] = tmp_dst_ids
-                node_feats[id] = torch.Tensor(tmp_node_feats).numpy().tolist()
-                num_nodes[id] = len(tmp_node_feats)
+            tmp_dict = {}
+            tmp_id = 0
+            tmp_src_ids = []
+            tmp_dst_ids = []
+            tmp_node_feats = []
+            # Extract features from triplets
+            for _, tripl in enumerate(caption_tripl[id]):
+                encoded_input = tokenizer(tripl, return_tensors='pt', add_special_tokens=False, padding=True)
+                output = model(**encoded_input)
+                if tripl[0] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[0]]=tmp_id
+                    tmp_id+=1
+                    tmp_node_feats.append(list(output.pooler_output[0]))
+                if tripl[1] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[1]]=tmp_id
+                    tmp_id+=1
+                    tmp_node_feats.append(list(output.pooler_output[1]))
+                if tripl[2] not in list(tmp_dict.keys()):
+                    tmp_dict[tripl[2]]=tmp_id
+                    tmp_id+=1
+                    tmp_node_feats.append(list(output.pooler_output[2]))
+                
+                # Create source and destination lists
+                tmp_src_ids.append(tmp_dict[tripl[0]])
+                tmp_dst_ids.append(tmp_dict[tripl[1]])
+                tmp_src_ids.append(tmp_dict[tripl[1]])
+                tmp_dst_ids.append(tmp_dict[tripl[2]])
+            src_ids[id] = tmp_src_ids
+            dst_ids[id] = tmp_dst_ids
+            node_feats[id] = torch.Tensor(tmp_node_feats).numpy().tolist()
+            num_nodes[id] = len(tmp_node_feats)
 
         # Write onto files
         with open('src_ids_' + str(split) + '.json', 'w') as f:
@@ -162,5 +163,5 @@ if __name__ == '__main__':
         RSICD_tripl2graph(triplets_path, model, tokenizer)
     if args.dataset == 'ucm':
         triplets_path = 'dataset/UCM_dataset'
-        UCM_tripl2graph(triplets_path, model, tokenizer)
+        UCM_tripl2graph(triplets_path, model, tokenizer, '_ucm')
     print("Done everything! Total time: {}".format((time.time()-total_time)))
