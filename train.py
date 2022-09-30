@@ -345,7 +345,11 @@ class full_pipeline_trainer():
             device = torch.device("cuda:0")
         self.device = device
     
-    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=5):
+    def fit(self, epochs, learning_rate, batch_size, criterion, early_stopping=False, tol_threshold=5, plot=False, combo=False):
+        # For plotting purposes
+        if plot:
+            train_losses = []
+            val_losses = []
         # Define dataloader
         trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
         valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
@@ -359,7 +363,6 @@ class full_pipeline_trainer():
             train_max = float('inf')
             tollerance = 0
         
-        # crit = nn.CrossEntropyLoss()
         
         for epoch in range(epochs):
             self.model.train()
@@ -369,13 +372,18 @@ class full_pipeline_trainer():
             for i, data in enumerate(tqdm(trainloader)):
                 _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                 images = images.to(self.device)
-                cap_outputs, class_outputs = self.model(images, encoded_captions, True)
-                # Loss for both tasks
                 triplets = triplets.to(self.device)
-                class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
-                # class_loss = crit(class_outputs, triplets)
-                cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
-                loss = 0.5*cap_loss + 0.5*class_loss
+                if combo:
+                    # Combined Loss
+                    cap_outputs, class_outputs = self.model(images, encoded_captions, True)
+                    class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    loss = 0.5*cap_loss + 0.5*class_loss
+                else:
+                    # Unique Loss
+                    cap_outputs, _ = self.model(images, encoded_captions, True)
+                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    loss = cap_loss
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -386,17 +394,28 @@ class full_pipeline_trainer():
                 for j, data in enumerate(tqdm(valloader)):
                     _, images, triplets, captions, encoded_captions, _, _, _, _ = data
                     images = images.to(self.device)
-                    cap_outputs, class_outputs = self.model(images)
                     triplets = triplets.to(self.device)
-                    class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
-                    # class_loss = crit(class_outputs, triplets)
-                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
-                    loss = 0.5*cap_loss + 0.5*class_loss
+                    if combo:
+                        # Combined Loss
+                        cap_outputs, class_outputs = self.model(images)
+                        class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
+                        cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        loss = 0.5*cap_loss + 0.5*class_loss
+                    else:
+                        # Unified Loss
+                        cap_outputs, _ = self.model(images)
+                        cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        loss = cap_loss
                     epoch_loss_val+=loss.item()
                     
             
             print('Training loss: {:.3f}'.format(epoch_loss_train/i))
             print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+            # Saving the losses for plotting purposes
+            if plot:
+                train_losses.append(epoch_loss_train/i)
+                val_losses.append(epoch_loss_val/j)
+            # Early stopping algorithm
             if early_stopping:
                 if ((epoch_loss_val/j) < val_max) and ((epoch_loss_train/i < train_max)) and tollerance<tol_threshold :
                     val_max = epoch_loss_val/j
@@ -412,9 +431,12 @@ class full_pipeline_trainer():
         
         if early_stopping:
             torch.save(best_model,self.save_path)
+            if plot:
+                return train_losses, val_losses
         else:
             torch.save(self.model,self.save_path)
-            
+            if plot:
+                return train_losses, val_losses
             
             
 class enc_finetuning():

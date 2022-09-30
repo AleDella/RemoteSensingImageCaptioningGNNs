@@ -4,6 +4,7 @@ from gensim.models import Word2Vec
 import torch
 import json
 import dgl
+import matplotlib.pyplot as plt
 
 def extract_encoding(sentences):
     '''
@@ -359,4 +360,20 @@ def load_graph_data(graph_path, split):
     '''
     return load_json(graph_path+'/'+'dst_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'src_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'node_feats_'+str(split)+'.json'), load_json(graph_path+'/'+'num_nodes_'+str(split)+'.json')
     
-    
+def save_plots(train_losses, val_losses, epochs, combo, gnn):
+    '''
+    Function to save the images of the plots of the training losses
+    '''
+    plt.plot([i+1 for i in range(epochs)], train_losses, label='Train loss')
+    plt.plot([i+1 for i in range(epochs)], val_losses, label='Validation loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    if combo:
+        loss = 'CombinedLoss'
+        l = 'cl'
+    else:
+        loss = 'UniqueLoss'
+        l = 'ul'
+    plt.title('Training Loss '+gnn.upper()+' + MultiHead + '+loss)
+    plt.legend()
+    plt.savefig('loss_images/'+str(gnn).lower()+'_mh_'+l+'_'+str(epochs)+'.png')

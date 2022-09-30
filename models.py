@@ -19,7 +19,11 @@ class TripletClassifier(nn.Module):
         self.model = resnet152(weights=weights)
         self.preprocess = weights.transforms()
         # Replace the last layer with a new layer for classification
-        self.model.fc = nn.Linear(in_features=2048,out_features=num_classes)
+        self.model.fc = nn.Sequential(
+            nn.Linear(in_features=2048,out_features=1024),
+            nn.Dropout(0.3),
+            nn.Linear(in_features=1024,out_features=num_classes)
+            )
         
         # Freeze all the layers except the fully connected
         for name, parameter in self.model.named_parameters():
@@ -190,11 +194,15 @@ class FinalModel(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, img_dim, tripl2idx, gnn='gat', vir=True, depth=1, decoder='lstm') -> None:
+    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, img_dim, tripl2idx, gnn='gat', res=False, vir=True, depth=1, decoder='lstm') -> None:
         super(FinalModel, self).__init__()
-        self.graph_encoder = GNN(feats_dim)
+        if gnn == 'gat' or gnn == 'gcn':
+            self.graph_encoder = GNN(feats_dim, gnn)
+        elif gnn == 'mlap':
+            self.graph_encoder = MLAPModel(res, vir, feats_dim, depth)
         self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
         # self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
+        self.sigmoid = nn.Sigmoid()
         self.idx2tripl = {v: k for k, v in tripl2idx.items()}
         self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -211,7 +219,9 @@ class FinalModel(nn.Module):
         
         self.decoder_type = decoder
         if self.decoder_type == 'linear':
-            self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
+            # self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
+            # For modified concatenation
+            self.decoder = nn.ModuleList([nn.Linear(feats_dim*2, len(vocab2idx)) for _ in range(max_seq_len)])
         if self.decoder_type == 'lstm':
             self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
         if self.decoder_type == 'rnn':
@@ -222,11 +232,14 @@ class FinalModel(nn.Module):
 
     def forward(self, img, labels=None, training=False):
         # Triplet classification
-        triplets = self.tripl_classifier(img)
-        # For multihead classifier
+        triplets = self.sigmoid(self.tripl_classifier(img))
+        # For normal classifier
+        # class_out = triplets
+        # # For multihead classifier
         triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
         class_out = triplets
         triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
+        # Changed for BCE loss
         # Extract indeces greater or equal than the threshold
         threshold = 0.5
         indeces = [[ i for i, d in enumerate(s) if d >= threshold] for s in triplets ]
@@ -242,8 +255,12 @@ class FinalModel(nn.Module):
         i_feats = self.img_encoder(img)
         graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
         graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
+        # Mod feats with concatenation
+        mod_feats = torch.cat([graph_feats, i_feats], dim=1)
+        # Mod feats with weighted sum and main graph
         # mod_feats = graph_feats + ( i_feats * self.img_weight)
-        mod_feats = i_feats + ( graph_feats * self.img_weight)
+        # Mod feats with weighted sum and main Image
+        # mod_feats = i_feats + ( graph_feats * self.img_weight)
         if self.decoder_type == 'linear':
             decoded_out = [d(mod_feats) for d in self.decoder]
         # Need to solve the problem with lstm and rnn for the labels

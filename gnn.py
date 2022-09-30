@@ -46,17 +46,25 @@ class GNN(nn.Module):
     '''
     Graph neural network class
     '''
-    def __init__(self, in_feats):
+    def __init__(self, in_feats, gnn):
         super(GNN, self).__init__()
-        self.conv1 = GATLayer(in_feats, 8)
-        self.conv2 = GATLayer(in_feats, 8)
-        self.pooling = dgl.nn.GlobalAttentionPooling(torch.nn.Linear(in_feats, 1))
+        self.gnn = gnn
+        if gnn == 'gat':
+            self.conv1 = GATLayer(in_feats, 8)
+            self.conv2 = GATLayer(in_feats, 8)
+            self.pooling = dgl.nn.GlobalAttentionPooling(torch.nn.Linear(in_feats, 1))
+        elif gnn == 'gcn':
+            self.conv1 = dgl.nn.pytorch.conv.GraphConv(in_feats, in_feats)
+            self.conv2 = dgl.nn.pytorch.conv.GraphConv(in_feats, in_feats)
+            self.pooling = dgl.nn.GlobalAttentionPooling(torch.nn.Linear(in_feats, 8))
         
     def forward(self, g, in_feat):
         # Perform graph convolution and activation function.
+        if self.gnn == 'gcn':
+            # Add self loops for gcn
+            g = dgl.add_self_loop(g)
         h = F.relu(self.conv1(g, in_feat))
         h = F.relu(self.conv2(g, h))
-        
         return self.pooling(g, h)
 
 class MLAPModel(nn.Module):

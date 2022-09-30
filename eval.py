@@ -197,7 +197,7 @@ if __name__ == "__main__":
     import json
     
     # Load the predictions
-    with open('finetuned_results.json','r') as file:
+    with open('conc_mlap_captions.json','r') as file:
         predictions = json.load(file)
     
     for key, value in predictions.items():
