@@ -6,6 +6,8 @@ import json
 import dgl
 import matplotlib.pyplot as plt
 
+from extract_triplets import extract_triplets
+
 def extract_encoding(sentences):
     '''
     Function that extracts the one-hot encoding from the labels of the nodes and edges
@@ -251,7 +253,7 @@ def tripl2graph(triplets, model, tokenizer):
                 tmp_dict[tripl[2]]=tmp_id
                 tmp_id+=1
                 tmp_node_feats.append(list(output.pooler_output[2]))
-            
+                
             # Create source and destination lists
             tmp_src_ids.append(tmp_dict[tripl[0]])
             tmp_dst_ids.append(tmp_dict[tripl[1]])
@@ -262,6 +264,77 @@ def tripl2graph(triplets, model, tokenizer):
         f = torch.Tensor(tmp_node_feats)
         graphs.append(g)
         feats.append(f)
+    
+    g = dgl.batch(graphs)
+    new_feats = torch.zeros((g.num_nodes(), feats[0].size(1)))
+    i = 0
+    for ft in feats:
+        for f in ft:
+            new_feats[i] = f
+            i+=1
+        
+    return g, new_feats
+
+
+def tripl2graphw(triplets, model, tokenizer):
+    '''
+    Function that creates and extracts the graph from the triplets for the waterfall pipeline
+    
+    Args:
+        triplets List[List]: list of lists of triplets
+        model (torch.nn.Module): model used for extracting the features from the nodes
+        
+    Return:
+        graph List[dgl.DGLGraph]: list of graphs
+        graph_features List[torch.Tensor]: list of features for each graph
+    '''
+    feats = []
+    graphs = []
+    model = model.to('cuda:0')
+    for sample in triplets:
+        tmp_dict = {}
+        tmp_id = 0
+        tmp_src_ids = []
+        tmp_dst_ids = []
+        tmp_node_feats = []
+        # Extract features from triplets
+        for _, tripl in enumerate(sample):
+            for t in tripl:
+                encoded_input = tokenizer(t, return_tensors='pt', add_special_tokens=False, padding=True)
+                output = model(**encoded_input.to('cuda:0'))
+                # If the tripl is "normal" i.e. there are relations in the sentence
+                if len(t) == 3:
+                    if t[0] not in list(tmp_dict.keys()):
+                        tmp_dict[t[0]]=tmp_id
+                        tmp_id+=1
+                        tmp_node_feats.append(list(output.pooler_output[0]))
+                    if t[1] not in list(tmp_dict.keys()):
+                        tmp_dict[t[1]]=tmp_id
+                        tmp_id+=1
+                        tmp_node_feats.append(list(output.pooler_output[1]))
+                    if t[2] not in list(tmp_dict.keys()):
+                        tmp_dict[t[2]]=tmp_id
+                        tmp_id+=1
+                        tmp_node_feats.append(list(output.pooler_output[2]))
+                    
+                    # Create source and destination lists
+                    tmp_src_ids.append(tmp_dict[t[0]])
+                    tmp_dst_ids.append(tmp_dict[t[1]])
+                    tmp_src_ids.append(tmp_dict[t[1]])
+                    tmp_dst_ids.append(tmp_dict[t[2]])
+                # If there are only entities in the sentence
+                else:
+                    if t[0] not in list(tmp_dict.keys()):
+                        tmp_dict[t[0]]=tmp_id
+                        tmp_id+=1
+                        tmp_node_feats.append(list(output.pooler_output[0]))
+                    tmp_src_ids.append(tmp_dict[t[0]])
+                    tmp_dst_ids.append(tmp_dict[t[0]])
+        
+            g = dgl.graph((tmp_src_ids, tmp_dst_ids))
+            f = torch.Tensor(tmp_node_feats)
+            graphs.append(g)
+            feats.append(f)
     
     g = dgl.batch(graphs)
     new_feats = torch.zeros((g.num_nodes(), feats[0].size(1)))
@@ -360,7 +433,7 @@ def load_graph_data(graph_path, split):
     '''
     return load_json(graph_path+'/'+'dst_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'src_ids_'+str(split)+'.json'), load_json(graph_path+'/'+'node_feats_'+str(split)+'.json'), load_json(graph_path+'/'+'num_nodes_'+str(split)+'.json')
     
-def save_plots(train_losses, val_losses, epochs, combo, gnn):
+def save_plots(train_losses, val_losses, epochs, combo, gnn, prefix):
     '''
     Function to save the images of the plots of the training losses
     '''
@@ -374,6 +447,51 @@ def save_plots(train_losses, val_losses, epochs, combo, gnn):
     else:
         loss = 'UniqueLoss'
         l = 'ul'
-    plt.title('Training Loss '+gnn.upper()+' + MultiHead + '+loss)
+    plt.title('Training Loss '+gnn.upper()+' '+loss)
     plt.legend()
-    plt.savefig('loss_images/'+str(gnn).lower()+'_mh_'+l+'_'+str(epochs)+'.png')
+    plt.savefig('loss_images/'+prefix+'_'+str(gnn).lower()+'_'+l+'_'+str(epochs)+'.png')
+    
+
+def generator(model, image_features, idx_to_value, value_to_idx, max_len, k, device):
+    '''
+    Riccardo's support function
+    '''
+    # k = number of captions to generate using beam search
+    
+    full_prediction = model.sample(image_features,max_len,value_to_idx['endseq'],k,device)
+    endseq_idx = value_to_idx['endseq']
+
+    captions = []
+    for prediction in full_prediction:
+        try:
+            index = prediction.index(endseq_idx)
+            prediction = [idx_to_value[idx] for idx in prediction[1:index]]
+        except:
+            prediction = [idx_to_value[idx] for idx in prediction[1:]]
+
+        captions.append(prediction)
+        
+    return captions
+
+
+
+
+
+    
+def produce_graphs(capt_gen, idx_to_value, value_to_idx, max_len, k, device, dataset):
+    '''
+    Function that produces the graphs given the captions
+    '''
+    capt_gen = capt_gen.to(device)
+    print("Producing captions from images...")
+    caps = {}
+    for imgid, img in dataset.images.items():
+        # fix the shape of the img
+        img = img.reshape(img.shape[2], img.shape[0], img.shape[1])
+        caps[str(imgid)] = generator(capt_gen,img,idx_to_value,value_to_idx,max_len,k,device)
+    print("Converting generated captions to triplets...")
+    for imgid, cap in caps.items():
+        triplets = [extract_triplets(sent) for sent in cap]
+        caps[str(imgid)] = triplets
+    return caps
+    

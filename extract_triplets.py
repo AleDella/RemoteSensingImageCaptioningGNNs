@@ -23,8 +23,13 @@ def extract_triplets(sentence):
     g = sng_parser.parse(sentence)
     
     # Get the tokenization like in the graph
-    for rel in g['relations']:
-        final_input.append((g['entities'][rel['subject']]['lemma_span'], rel['relation'], g['entities'][rel['object']]['lemma_span']))
+    if g['relations'] == []:
+        for ent in g['entities']:
+            final_input.append(ent['lemma_span'])
+    else:
+        for rel in g['relations']:
+            final_input.append((g['entities'][rel['subject']]['lemma_span'], rel['relation'], g['entities'][rel['object']]['lemma_span']))
+        
     
     return final_input
 

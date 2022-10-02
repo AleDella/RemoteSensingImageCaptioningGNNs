@@ -1,7 +1,8 @@
 from turtle import forward
 import torch
 import torch.nn as nn
-from torchvision.models import resnet152, ResNet152_Weights
+from torchvision.models import resnet152, ResNet152_Weights, VGG16_Weights, vgg16
+from torch.nn.utils.rnn import pack_padded_sequence
 from gnn import GNN, LSTMDecoder, _encode_seq_to_arr, decoderRNN, MLAPModel
 from transformers import BertModel, BertTokenizer
 from graph_utils import tripl2graph
@@ -52,9 +53,12 @@ class CaptionGenerator(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, feats_dim, max_seq_len, vocab2idx, decoder='lstm') -> None:
+    def __init__(self, feats_dim, max_seq_len, vocab2idx, gnn='gat', vir=False, res=False, depth=1, decoder='lstm') -> None:
         super(CaptionGenerator, self).__init__()
-        self.encoder = GNN(feats_dim)
+        if gnn == 'gat' or gnn == 'gcn':
+            self.encoder = GNN(feats_dim, gnn)
+        elif gnn == 'mlap':
+            self.encoder = MLAPModel(res, vir, feats_dim, depth)
         self.decoder_type = decoder
         if self.decoder_type == 'linear':
             self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
@@ -93,9 +97,12 @@ class AugmentedCaptionGenerator(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, gnn='gat', vir=True, depth=1, decoder='lstm') -> None:
+    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, gnn='gat', res=True, vir=True, depth=1, decoder='lstm') -> None:
         super(AugmentedCaptionGenerator, self).__init__()
-        self.encoder = GNN(feats_dim)
+        if gnn == 'gat' or gnn == 'gcn':
+            self.encoder = GNN(feats_dim, gnn)
+        elif gnn == 'mlap':
+            self.encoder = MLAPModel(res, vir, feats_dim, depth)
         
         # Incorporate image in the pipeline
         self.img_encoder = img_encoder
@@ -200,8 +207,8 @@ class FinalModel(nn.Module):
             self.graph_encoder = GNN(feats_dim, gnn)
         elif gnn == 'mlap':
             self.graph_encoder = MLAPModel(res, vir, feats_dim, depth)
-        self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
-        # self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
+        # self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
+        self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
         self.sigmoid = nn.Sigmoid()
         self.idx2tripl = {v: k for k, v in tripl2idx.items()}
         self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
@@ -234,12 +241,12 @@ class FinalModel(nn.Module):
         # Triplet classification
         triplets = self.sigmoid(self.tripl_classifier(img))
         # For normal classifier
-        # class_out = triplets
-        # # For multihead classifier
-        triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
         class_out = triplets
-        triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
-        # Changed for BCE loss
+        # # For multihead classifier
+        # triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
+        # class_out = triplets
+        # triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
+        # # Changed for BCE loss
         # Extract indeces greater or equal than the threshold
         threshold = 0.5
         indeces = [[ i for i, d in enumerate(s) if d >= threshold] for s in triplets ]
@@ -274,8 +281,7 @@ class FinalModel(nn.Module):
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
     
-    
-# WIP
+
 
 class FinetunedModel(nn.Module):
     '''
@@ -329,6 +335,159 @@ class FinetunedModel(nn.Module):
         batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
+
+# Normal caption generator implemented by Riccardo
+class TextGenerator(nn.ModuleList):
+    '''
+    This model is a caption generator for the UCM dataset.
+    '''
+    def __init__(self, vocab_size, hidden_dim, type='gru', backbone = 'resnet152', pretrained_back = True, trainable=True):
+        super(TextGenerator, self).__init__()
+        self.hidden_dim = hidden_dim
+        
+        if(backbone=='resnet152'):
+            self.weights = ResNet152_Weights.DEFAULT
+            self.preprocess = self.weights.transforms()
+            
+            if(pretrained_back):
+                self.backbone = resnet152(weights=self.weights)
+            else:
+                self.backbone = resnet152()
+        elif(backbone=='vgg16'):
+            self.weights = VGG16_Weights.DEFAULT
+            self.preprocess = self.weights.transforms()
+            
+            if(pretrained_back):
+                self.backbone = vgg16(weights=self.weights)
+            else:
+                self.backbone = vgg16()
+        else:
+            raise RuntimeError('Backbone not found!')
+        
+        if not trainable: 
+            for _ , parameter in self.backbone.named_parameters():
+                parameter.requires_grad_(False)
+        
+        if (backbone=='resnet152'):   
+            img_feat_dim = self.backbone.fc.in_features
+            self.backbone.fc = nn.Identity()
+        elif(backbone=='vgg16'):
+            img_feat_dim = self.backbone.classifier[-1].in_features
+            self.backbone.classifier = nn.Sequential(self.backbone.classifier[:-1])
+                
+        # Embedding layer
+        self.embedding = nn.Embedding(vocab_size, hidden_dim,padding_idx=0) 
+        self.dropout = nn.Dropout(0.5)
+        # LSTM
+        if(type=='gru'):
+            self.rnn = nn.GRU(hidden_dim, hidden_dim, batch_first=True, num_layers=1) 
+        elif(type=='lstm'):
+            self.rnn = nn.LSTM(hidden_dim, hidden_dim, batch_first=True, num_layers=1) 
+        else:
+            print('Select RNN type')
+            
+        # Feature processing
+        self.process_features = nn.Sequential(
+            nn.Linear(img_feat_dim, self.hidden_dim),
+        )
+        # Linear layer
+        self.linear1 = nn.Linear(hidden_dim, vocab_size)
+		
+    def forward(self, x, img, lengths):
+        # Process the image
+        img = self.preprocess(img)
+        img_feat = self.backbone(img)
+        img_feat = self.process_features(img_feat)
+        
+        # From idx to embedding
+        x = x.long()
+        x = self.dropout(self.embedding(x))
+
+        embeddings = torch.cat((img_feat.unsqueeze(1), x), 1)
+        
+        packed = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        out,_ = self.rnn(packed)
+        
+        out = self.linear1(out[0])
+        
+        return out
+    
+    def sample(self, img, max_seq_len, endseq_index, k, device):
+        """Generate captions for given image features using beam search."""
+        # The algorithm must implement beam search to generate captions 
+        # Beam search works like that
+        # At the first iteration all the k prediction starts with the most probable word (usually start of seq!)
+        # Other iterations build up on the same start of sequence, but the next tokens are sampled in a mutually exclusive way, so that different captions are created. 
+        # For each caption, the k most probable words are selected. Then based on the sum of the probabilities up until that point, k sentences are kept, and so on until all reach end of sequence. 
+
+        with torch.no_grad():
+            sampled_ids = torch.zeros((k,max_seq_len+1),dtype=torch.long).to(device) # To store the sampled ids
+            img = img.to(device)
+            img = self.preprocess(img)
+            img_feat = self.backbone(img.unsqueeze(0))
+            inputs = self.process_features(img_feat)
+            
+            states = None
+            first = True
+            sentences = []
+            sum_probs_list = []
+            for i in range(max_seq_len+1):
+                hiddens, states = self.rnn(inputs, states)
+                out = self.linear1(hiddens)
+                out = out.sort(descending=True)
+                probs = out[0].squeeze(1)
+                predicted = out[1].squeeze(1)
+                if(i==0):
+                    # Append the first prediction
+                    sampled_ids[:,i] = torch.tile(predicted[:,0],(k,))
+                    inputs = self.embedding(sampled_ids[:,i]).unsqueeze(1)
+                    states = torch.tile(states,(1,k,1))
+                else:
+                    probs = torch.softmax(probs,dim=1)
+                    if(first):
+                        sampled_ids[:,i] = predicted[0,:k]
+                        sum_probs = probs[0,:k]
+                        first = False
+                    else:
+                        # CHECK AND REMOVE FINISHED SENTENCES
+                        mask = torch.all(sampled_ids!=endseq_index,dim=1)
+                        idx_mask = (mask==True).nonzero()
+                        
+                        for j in range(mask.shape[0]):
+                            if(not mask[j]):
+                                sentences.append(sampled_ids[j,:].tolist())
+                                sum_probs_list.append((sum_probs[j]).item())
+                                
+                        sampled_ids = sampled_ids[idx_mask,:].squeeze(1)
+                        # Check to break the run
+                        if(sampled_ids.shape[0]==0):
+                            indexsorted = sorted(range(len(sum_probs_list)), key=lambda k: sum_probs_list[k],reverse=True)
+                            sentences = [sentences[i] for i in indexsorted]
+                            
+                            break
+                        
+                        k = sampled_ids.shape[0]
+                        # Get predictions and probabilities
+                        predicted = predicted[idx_mask,:k].flatten()
+                        probs = probs[idx_mask,:k].flatten()
+                        sum_probs = sum_probs[idx_mask].squeeze(1)
+                        # Get candidates 
+                        candidates = torch.repeat_interleave(sampled_ids,k,dim=0)
+                        candidates[:,i] = predicted
+                        states = torch.repeat_interleave(states,k,dim=1)
+
+                        sum_probs = torch.repeat_interleave(sum_probs,k,dim=0)
+                        sum_probs = torch.mul(sum_probs,probs).sort(descending=True)
+                        indices = sum_probs[1]
+                        
+                        sampled_ids=candidates[indices[:k],:]
+                        
+                        states = states[:,indices[:k],:]
+                        sum_probs = sum_probs[0][:k]
+                    
+                    inputs = self.embedding(sampled_ids[:,i].unsqueeze(1))
+                    
+        return sentences
 
 
 

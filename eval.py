@@ -2,13 +2,14 @@ from torch.utils.data import DataLoader
 import torch
 from tqdm import tqdm
 import dgl
-from graph_utils import bleuFormat, decode_output, get_node_features
+from graph_utils import bleuFormat, decode_output, get_node_features, tripl2graphw
 import json
 from functools import partial
-from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full
+from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full, collate_fn_waterfall
 from numpy import argmax
 from torchmetrics.functional import f1_score
 from pycocoevalcap.bleu.bleu import Bleu
+from transformers import BertModel, BertTokenizer
 
 
 
@@ -169,6 +170,44 @@ def eval_pipeline(dataset, model, filename):
     # Transform the output in bleu Format for the evaluation
     bleuFormat(filename)
     
+def eval_waterfall(dataset, model, filename):
+    '''
+    Function that tests a model
+    
+    Args:
+        dataset (torch.utils.data.Dataset): dataset to use for testing.
+        model (torch.nn.Module): model to test on the dataset
+        filename (str): name of the file in which the captions are saved
+    
+    Return:
+        None
+    '''
+    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_waterfall, word2idx=dataset.word2idx, training=True))
+    # Set the correct device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    feature_encoder = BertModel.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    # Create the conversion id -> token
+    idx2word = {v: k for k, v in dataset.word2idx.items()}
+    with torch.no_grad():
+        model.eval()
+        result = {}
+        for _, data in enumerate(tqdm(testloader)):
+            ids, img, triplets, _, encoded_captions = data
+            graphs, graph_feats = tripl2graphw(triplets, feature_encoder, tokenizer)
+            graphs, graph_feats = graphs.to(device), graph_feats.to(device)
+            img = img.to(device)
+            outputs = model(graphs, graph_feats, img, encoded_captions)
+            decoded_outputs = decode_output(outputs, idx2word)
+            for i, id in enumerate(ids):
+                result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
+            
+    with open(filename, "w") as outfile:
+        json.dump(result, outfile)
+    # Transform the output in bleu Format for the evaluation
+    bleuFormat(filename)
+    
 
 def eval_predictions(predictions, ground_truth):
     '''
@@ -190,14 +229,14 @@ def eval_predictions(predictions, ground_truth):
             print('BLEU '+str(i))
             print(score[i])
     
-    return 
+    return
 
 
 if __name__ == "__main__":
     import json
     
     # Load the predictions
-    with open('conc_mlap_captions.json','r') as file:
+    with open('prova_decoder.json','r') as file:
         predictions = json.load(file)
     
     for key, value in predictions.items():

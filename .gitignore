@@ -5,7 +5,7 @@ dataset/
 Results/
 __pycache__
 tripletsRSICD.json
-
+weights/
 loss_images/
 yolov5/
 model_finetuned.pth
@@ -13,3 +13,4 @@ model.pth
 *.pth
 *.json
 *.csv
+*.pkl

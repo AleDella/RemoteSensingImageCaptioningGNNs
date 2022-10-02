@@ -84,6 +84,28 @@ def collate_fn_captions(data, word2idx, training):
 
     return [d['imgid'] for d in data], [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
 
+def collate_fn_waterfall(data, word2idx, training):
+    '''
+    Collate function for the graph to caption in the waterfall pipeline
+    '''
+    # Image part
+    images = [d['image'] for d in data]    
+    images = torch.stack(images, 0)
+    images = images.permute(0,3,1,2)
+    # Between 0 and 1 for pytorch
+    images = images/255
+    triplets = [d['triplets'] for d in data]
+    # Create the captions tensor
+    new_cap_ids = []
+    for d in data:
+        smth = []
+        for cap in d['captions']:
+            tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
+            smth.append(tmp)
+        new_cap_ids.append(smth)
+
+    return [d['imgid'] for d in data], images, triplets, [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training)
+
 
 def augmented_collate_fn(data, word2idx, training):
     '''
