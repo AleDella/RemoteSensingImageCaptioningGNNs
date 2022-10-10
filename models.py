@@ -73,7 +73,7 @@ class CaptionGenerator(nn.Module):
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
 
-    def forward(self, g, feats, labels, training):
+    def forward(self, g, feats, labels, lengths, training):
         graph_feats = self.dropout(self.encoder(g, feats))
         
         if self.decoder_type == 'linear':
@@ -81,29 +81,26 @@ class CaptionGenerator(nn.Module):
         if self.decoder_type == 'lstm':
             decoded_out = self.decoder(g, graph_feats, labels, training)
         if self.decoder_type == 'rnn':
-            decoded_out = self.decoder(graph_feats)
+            decoded_out = self.decoder(graph_feats, labels, lengths)
         return decoded_out
 
-    def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
+    def _loss(self, out, labels, lenghts, vocab2idx, max_seq_len, device) -> torch.Tensor:
         if self.decoder_type == 'lstm' or self.decoder_type == 'rnn':
-            new_labels = []
-            for label in labels:
-                tmp = []
-                for l in label:
-                    tmp.append(l[1:])
-                new_labels.append(tmp)
+            new_labels = [label[1:] for label in labels]
             # batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in new_labels])
-            batched_label = fixed_seq_to_arr(new_labels, vocab2idx, self.max_seq_len)# (batch_size, num_captions, tokens)
-            batched_label = batched_label.transpose(0,1) # (num_captions, batch_size, tokens)
-            batched_label = batched_label.flatten(1,2)# (num_captions, batch_szie*tokens)
-            if type(out) == list:
-                out = torch.vstack(out)
-            else:
-                out = out.flatten(0, 1)# (batch_szie*tokens, vocab_len)
-            c_loss = 0.0
-            for gt in batched_label:
-                c_loss += nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, gt.to(device=device))
-            return c_loss/batched_label.shape[0]# Mean of the losses for each of the 5 captions
+            batched_label = fixed_seq_to_arr(new_labels, vocab2idx, max_seq_len)# (batch_size, num_captions, tokens)
+            targets = pack_padded_sequence(batched_label, lenghts, batch_first=True)[0]
+            # batched_label = batched_label.transpose(0,1) # (num_captions, batch_size, tokens)
+            # batched_label = batched_label.flatten(1,2)# (num_captions, batch_szie*tokens)
+            batched_label = batched_label.flatten(0,1)
+            #out = out.flatten(0, 1)# (batch_szie*tokens, vocab_len)
+            
+            # c_loss = 0.0
+            # for gt in batched_label:
+            #     c_loss += nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, gt.to(device=device))
+            c_loss = nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, targets.to(device=device))
+            # return c_loss/batched_label.shape[0]# Mean of the losses for each of the 5 captions
+            return c_loss
             
         else:
             batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])

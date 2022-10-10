@@ -609,17 +609,12 @@ class waterfall_trainer():
             epoch_loss_val = 0
             print('Epoch: '+str(epoch))
             for i, data in enumerate(tqdm(trainloader)):
-                imgid, img, triplets, captions, encoded_captions = data
+                imgid, img, triplets, captions, encoded_captions, lengths = data
                 graphs, graph_feats = tripl2graphw(triplets, self.feature_encoder, self.tokenizer)
-                # print("Triplets: ", triplets)
-                # print("Graphs: ", graphs)
-                # print("Graph feats: ", graph_feats.shape)
-                # exit(0)
                 graphs, graph_feats = graphs.to(self.device), graph_feats.to(self.device)
-                # img = img.to(self.device)
-                outputs = self.model(graphs, graph_feats, encoded_captions, training=True)
+                outputs = self.model(graphs, graph_feats, encoded_captions, lengths, training=True)
                 optimizer.zero_grad()
-                loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                loss = criterion(outputs, captions, lengths, self.word2idx, encoded_captions.size(1), self.device)
                 loss.backward()
                 optimizer.step()
                 epoch_loss_train+=loss.item()
@@ -627,12 +622,12 @@ class waterfall_trainer():
                 with torch.no_grad():
                     self.model.eval()
                     for j, data in enumerate(tqdm(valloader)):
-                        imgid, img, triplets, captions, encoded_captions = data
+                        imgid, img, triplets, captions, encoded_captions, lengths = data
                         graphs, graph_feats = tripl2graphw(triplets, self.feature_encoder, self.tokenizer)
                         graphs, graph_feats = graphs.to(self.device), graph_feats.to(self.device)
                         # img = img.to(self.device)
-                        outputs = self.model(graphs, graph_feats, encoded_captions, training=False)
-                        loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        outputs = self.model(graphs, graph_feats, encoded_captions, lengths, training=False)
+                        loss = criterion(outputs, captions, lengths, self.word2idx, encoded_captions.size(1), self.device)
                         epoch_loss_val+=loss.item()
                     
             print('Training loss: {:.3f}'.format(epoch_loss_train/i))
