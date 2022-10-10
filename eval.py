@@ -158,10 +158,10 @@ def eval_pipeline(dataset, model, filename, pil):
         model.eval()
         result = {}
         for _, data in enumerate(tqdm(testloader)):
-            ids, images, _, _, _, _, _, _, _ = data
+            ids, images, _, captions, encoded_captions, lengths, _, _, _, _ = data
             images = images.to(device)
             try:
-                cap_outputs, _ = model(images, training=False)
+                cap_outputs, _ = model(images, captions, encoded_captions, lengths, training=False)
             except:
                 cap_outputs, _ = model(images)
             # decoded_outputs = decode_output(cap_outputs, idx2word)
