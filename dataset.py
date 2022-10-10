@@ -90,24 +90,40 @@ def collate_fn_waterfall(data, word2idx, training, pil):
     '''
     Collate function for the graph to caption in the waterfall pipeline
     '''
-    # Image part
-    images = [d['image'] for d in data]    
+    
+    # Create the captions tensor
+    new_cap_ids = []
+    cap_length = []
+    index = torch.randperm(len(data[0]['captions']))[:1]
+    for d in data:
+        # smth = []
+        # smth_len = []
+        # for cap in d['captions']:
+        #     tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
+        #     smth_len.append(len(cap))
+        #     smth.append(tmp)
+        tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in d['captions'][index]]
+        new_cap_ids.append(tmp)
+        cap_length.append(len(tmp))
+    
+    def argsort(seq, reverse):
+        # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
+        return sorted(range(len(seq)), key=seq.__getitem__, reverse=reverse)
+    
+    sorted_indexes = argsort(cap_length, True)
+    
+    new_cap_ids = [new_cap_ids[id] for id in sorted_indexes]
+    cap_length = [cap_length[id] for id in sorted_indexes]
+    images = [data[id]['image'] for id in sorted_indexes]
+    triplets = [data[id]['triplets'] for id in sorted_indexes]
+        
     images = torch.stack(images, 0)
     if not pil:
         images = images.permute(0,3,1,2)
-    # Between 0 and 1 for pytorch
     images = images/255
-    triplets = [d['triplets'] for d in data]
-    # Create the captions tensor
-    new_cap_ids = []
-    for d in data:
-        smth = []
-        for cap in d['captions']:
-            tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
-            smth.append(tmp)
-        new_cap_ids.append(smth)
-
-    return [d['imgid'] for d in data], images, triplets, [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training)
+    
+    
+    return [data[id]['imgid'] for id in sorted_indexes], images, triplets, [data[id]['captions'][index] for id in sorted_indexes], pad_encodings(new_cap_ids, word2idx['<pad>'], index, training=training), cap_length
 
 
 def augmented_collate_fn(data, word2idx, training):
