@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
 from dgl.ops import edge_softmax
+from torch.nn.utils.rnn import pack_padded_sequence
 
 # GNN modules ####################################################
 class GATLayer(nn.Module):
@@ -160,14 +161,27 @@ class MLAPModel(nn.Module):
         return torch.stack(self._graph_embs, dim=0)
 
 # Util function
-def _encode_seq_to_arr(sequence, vocab2idx, max_seq_len) -> torch.Tensor:
+def _encode_seq_to_arr(seq, vocab2idx, max_seq_len) -> torch.Tensor:
     '''
-    Function that encodes a sequence (used internally)
+    Function that encodes a sequence in the lstm model (used internally)
+    '''
+    seq = seq.tolist()
+    seq = seq[:max_seq_len] + ["<pad>"] * max(0, max_seq_len - len(seq))
+    return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["<unk>"] for w in seq], dtype=torch.int64)
+
+def encode_seq_to_arr_loss(sequence, vocab2idx, max_seq_len) -> torch.Tensor:
+    '''
+    Function that encodes a sequence in the model loss(used internally)
     '''
     seq = [seq[:max_seq_len] + ["<pad>"] * max(0, max_seq_len - len(seq)) for seq in sequence]
     return torch.tensor([vocab2idx[w] if w in vocab2idx else vocab2idx["<unk>"] for x in seq for w in x], dtype=torch.int64)
 
-
+def fixed_seq_to_arr(sequence, vocab2idx, max_seq_len):
+    seq = [seq[:max_seq_len] + ["<pad>"] * max(0, max_seq_len - len(seq)) for seq in sequence]
+    # print("\nSequence: ", len(seq), len(seq[0]), len(seq[0][0]))
+    res = torch.tensor([[vocab2idx[x] if x in vocab2idx else vocab2idx["<unk>"] for x in s ] for s in seq], dtype=torch.int64)
+    # print(res.shape)
+    return res
 
 # Decoders ###########################################################à
 class LSTMDecoder(nn.Module):
@@ -182,38 +196,74 @@ class LSTMDecoder(nn.Module):
         self.lstm = nn.LSTMCell(dim_feat, dim_feat)
         self.w_hc = nn.Linear(dim_feat * 2, dim_feat)
         self.layernorm = nn.LayerNorm(dim_feat)
-        self.vocab_encoder = nn.Embedding(len(vocab2idx), dim_feat)
+        self.vocab_encoder = nn.Embedding(len(vocab2idx), dim_feat, padding_idx=0)
         self.vocab_bias = nn.Parameter(torch.zeros(len(vocab2idx)))
 
     def forward(self, graph: dgl.DGLGraph, feats: torch.Tensor, labels: any, training: bool):
         self.training = training
-        if self.training:
-            # teacher forcing
-            batched_label = labels
-            batched_label = torch.hstack((torch.zeros((graph.batch_size, 1), dtype=torch.int64), batched_label))
-            true_emb = self.vocab_encoder(batched_label.to(device=graph.device))
-        h_t, c_t = feats.clone(), feats.clone()
+        # if self.training:
+        #     # teacher forcing
+        #     batched_label = torch.vstack([_encode_seq_to_arr(label, self._vocab2idx, self._max_seq_len - 1) for label in labels])
+        #     batched_label = torch.hstack((torch.zeros((graph.batch_size, 1), dtype=torch.int64), batched_label))
+        #     true_emb = self.vocab_encoder(batched_label.to(device=graph.device))
+        feats = feats.unsqueeze(0)
+        # h_t, c_t = feats.clone(), feats.clone()
+        h_t, c_t = feats[-1].clone(), feats[-1].clone()
+        # Try for batch_first = True
+        # h_t, c_t = feats.clone(), feats.clone()
+        # print("\nFeats: ", feats.shape)
+        feats = feats.transpose(0,1) # (batch_size, L+1, dim_feat)
+        # feats = feats.unsqueeze(0)
         out = []
         pred_emb = self.vocab_encoder(torch.zeros((graph.batch_size), dtype=torch.int64, device=graph.device))
 
         vocab_mat = self.vocab_encoder(torch.arange(len(self._vocab2idx), dtype=torch.int64, device=graph.device))
+        # print("Pred Emb: {}\nVocab mat: {}\tHT: {}\t CT: {}\t Feats: {}\n".format(pred_emb.shape, vocab_mat.shape, h_t.shape, c_t.shape, feats.shape))
+        # if self.training:
+        #     max = true_emb.size(1)
+        # else:
+        #     max = pred_emb.size(1)
+        # for i in range(max-1):
+        # print("Pred_emb: ", pred_emb.shape)
         
-        if self.training:
-            max = true_emb.size(1)
-        else:
-            max = pred_emb.size(1)
-        for i in range(max-1):
-            if self.training:
-                _in = true_emb[:, i]
-            else:
-                _in = pred_emb
+        for i in range(self._max_seq_len):
+            _in = pred_emb
+            # print("Max seq len: ", self._max_seq_len)
+            # print(true_emb.shape)
+            # if self.training:
+            #     _in = true_emb[:, i]
+            # else:
+            #    _in = pred_emb
             h_t, c_t = self.lstm(_in, (h_t, c_t))
-            a = F.softmax(torch.bmm(feats.unsqueeze(-1), h_t.unsqueeze(1)), dim=1)  # (batch_size, L + 1)
-            context = torch.bmm(a, feats.unsqueeze(-1)).squeeze(1)
-            pred_emb = torch.tanh(self.layernorm(self.w_hc(torch.hstack((h_t, context.squeeze(-1))))))  # (batch_size, dim_feat)
-
+            # a = F.softmax(torch.bmm(feats.unsqueeze(-1), h_t.unsqueeze(1)), dim=1)  # (batch_size, L + 1)
+            # context = torch.bmm(a, feats.unsqueeze(-1)).squeeze(1)
+            # pred_emb = torch.tanh(self.layernorm(self.w_hc(torch.hstack((h_t, context.squeeze(-1))))))  # (batch_size, dim_feat)
+            # print("Feats size: {}\tHT: {}\n".format(feats.shape, h_t.shape))
+            # a = torch.bmm(feats, h_t.unsqueeze(-1))
+            a = torch.bmm(feats, h_t.unsqueeze(-1))
+            # print(a.shape)
+            a = F.softmax(a.squeeze(-1), dim=1)# (batch_size, L + 1)
+            # print(a.shape)
+            # context = torch.bmm(a, feats).squeeze(0)
+            context = torch.bmm(a.unsqueeze(1), feats).squeeze(1)
+            # print(context.shape)
+            # Try to fix spaghetti
+            # context = context.transpose(0,1)
+            # print(h_t.shape)
+            pred_emb = torch.hstack((h_t, context))
+            # print("Pred: ", pred_emb.shape)
+            pred_emb = self.w_hc(pred_emb)
+            
+            # print("Pred: ", pred_emb.shape)
+            pred_emb = self.layernorm(pred_emb)
+            # print("Pred: ", pred_emb.shape)
+            pred_emb = torch.tanh(pred_emb)
+            # print("Pred: ", pred_emb.shape)
+            
+            # print("Output: ", pred_emb.shape)
+            # exit(0)
             out.append(torch.matmul(pred_emb, vocab_mat.T) + self.vocab_bias.unsqueeze(0))
-
+        
         return out
 
 
@@ -221,25 +271,23 @@ class decoderRNN(nn.Module):
     '''
     RNN decoder for graph features
     '''
-    def __init__(self, embed_size,vocab_size, hidden_size, num_layers):
+    def __init__(self, embed_size,vocab_size, hidden_size, num_layers, max_len):
         super(decoderRNN, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers)
+        self.embedding = nn.Embedding(vocab_size, embed_size, padding_idx=0)
+        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
         self.linear = nn.Linear(hidden_size, vocab_size)
-        self.dropout = nn.Dropout(0.5)
+        self.softmax = nn.Softmax()
+        self.max_len = max_len
     
-    def forward(self, features, caption):
-        print("\nFull caption: ", caption.shape)
-        embeddings = self.dropout(self.embedding(caption.to('cuda' if torch.cuda.is_available() else 'cpu')))
-        print("Embeddings: {}\tFeatures: {}\n".format(embeddings.shape, features.shape))
-        embeddings = torch.cat((features.unsqueeze(1),embeddings), dim=0)
-        hiddens, _ = self.lstm(embeddings)
-        outputs = self.linear(hiddens)
+    def forward(self, features, encoded_captions, lengths):
+        # Feature size: [batch_size, BERT_feat_dim*2]
+        # Produce the initial embeddings with <sos>
+        # embeddings = self.embedding(torch.ones((features.shape[0], self.max_len), dtype=torch.int64, device=features.device)) # (batch_size, max_len, BERT_feat_dim*2)
+        embeddings = self.embedding(encoded_captions.to(features.device))
+        packed_embs = pack_padded_sequence(embeddings, lengths, batch_first=True)
+        hiddens, _ = self.lstm(packed_embs, (features.clone().unsqueeze(0), features.clone().unsqueeze(0)))
+        outputs = self.linear(hiddens[0]) # (batch_size, max_len, num_vocabs)
         return outputs
-
-
-
-
 
 # Testing
 if __name__ == '__main__':

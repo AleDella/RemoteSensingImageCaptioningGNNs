@@ -143,6 +143,36 @@ def decode_output(out, idx2word):
     
     return sentences
 
+
+def fixed_decode_output(out, idx2word):
+    '''
+    Function that decodes the network's output into the actual captions
+    '''
+    if type(out) == list:
+        sentences = [[] for _ in range(out[0].shape[0])]
+        for i, tok in enumerate(out):
+            for j, sent in enumerate(tok):
+                sentences[j].append(argmax(tok.cpu().detach().numpy()))
+    else:
+        sentences = [[] for _ in range(out.shape[0])]
+        for i, sent in enumerate(out):
+            for tok in sent:
+                sentences[i].append(argmax(tok.cpu().detach().numpy()))
+    
+    for j, sent in enumerate(sentences):
+        for i, id in enumerate(sent):
+            sentences[j][i] = idx2word[id]
+    try:
+        sentences = [sent[:sent.index("<eos>")+1] for sent in sentences]
+    except:
+        try:
+            sentences = [sent[:sent.index("<pad>")] for sent in sentences]
+        except:
+            print(sentences)
+        
+    
+    return sentences
+
 def encode_caption(caption, word2idx):
     '''
     Function that encodes the captions and return a tensor
@@ -347,7 +377,7 @@ def tripl2graphw(triplets, model, tokenizer):
     return g, new_feats
     
 
-def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
+def pad_encodings(captions, pad_id, index, training=True) -> torch.Tensor:
     '''
     Function that pads the sequences of ids using pytorch pad functions
     
@@ -360,17 +390,18 @@ def pad_encodings(captions, pad_id, training=True) -> torch.Tensor:
     '''
     res = []
     for sample in captions:
-        if training:
-            index = torch.randperm(len(sample))[:1]
-            res.append(torch.tensor(sample[index]))
-        else:
-            tmp = []
-            for cap in sample:
-                cap = torch.tensor(cap)
-                index = torch.randperm(len(sample))[:1]
-                tmp.append(torch.tensor(cap[:, index]).reshape((sample.size(0))))
+        # if training:
+        #     index = torch.randperm(len(sample))[:1]
+        #     res.append(torch.tensor(sample[index]))
+        # else:
+        #     tmp = []
+        #     for cap in sample:
+        #         cap = torch.tensor(cap)
+        #         index = torch.randperm(len(sample))[:1]
+        #         tmp.append(torch.tensor(cap[:, index]).reshape((sample.size(0))))
                 
-            res.append(torch.nn.utils.rnn.pad_sequence(tmp, padding_value=pad_id)) # (max_len, number_captions)
+        #     res.append(torch.nn.utils.rnn.pad_sequence(tmp, padding_value=pad_id)) # (max_len, number_captions)
+        res.append(torch.tensor(sample))
 
     return torch.nn.utils.rnn.pad_sequence(res, batch_first=True, padding_value=pad_id) # (batch_size, max_len, number_captions) if training; else (batch_size, max_len)
 
@@ -449,7 +480,8 @@ def save_plots(train_losses, val_losses, epochs, combo, gnn, prefix):
         l = 'ul'
     plt.title('Training Loss '+gnn.upper()+' '+loss)
     plt.legend()
-    plt.savefig('loss_images/'+prefix+'_'+str(gnn).lower()+'_'+l+'_'+str(epochs)+'.png')
+    # plt.savefig('loss_images/'+prefix+'_'+str(gnn).lower()+'_'+l+'_'+str(epochs)+'.png')
+    plt.savefig(prefix+'_'+str(gnn).lower()+'_'+l+'_'+str(epochs)+'.png')
     
 
 def generator(model, image_features, idx_to_value, value_to_idx, max_len, k, device):
@@ -483,11 +515,12 @@ def produce_graphs(capt_gen, idx_to_value, value_to_idx, max_len, k, device, dat
     Function that produces the graphs given the captions
     '''
     capt_gen = capt_gen.to(device)
+    capt_gen.eval()
     print("Producing captions from images...")
     caps = {}
     for imgid, img in dataset.images.items():
         # fix the shape of the img
-        img = img.reshape(img.shape[2], img.shape[0], img.shape[1])
+        # img = img.reshape(img.shape[2], img.shape[0], img.shape[1])
         caps[str(imgid)] = generator(capt_gen,img,idx_to_value,value_to_idx,max_len,k,device)
     print("Converting generated captions to triplets...")
     for imgid, cap in caps.items():

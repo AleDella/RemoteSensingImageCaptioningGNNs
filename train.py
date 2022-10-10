@@ -332,7 +332,8 @@ class full_pipeline_trainer():
     Class to train full pipeline on a dataset.
     The dataset should return the image as well as the ground truth triplets which are in the image
     '''
-    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None):
+    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None, pil=False):
+        self.pil = pil
         self.model = model
         self.dataset_train = dataset_train
         self.dataset_val = dataset_val
@@ -352,8 +353,8 @@ class full_pipeline_trainer():
             train_losses = []
             val_losses = []
         # Define dataloader
-        trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
-        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True))
+        trainloader = DataLoader(self.dataset_train,batch_size=batch_size,shuffle=True,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True, pil=self.pil))
+        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn,triplet_to_idx=self.dataset_train.triplet_to_idx, word2idx=self.word2idx, training=True, pil=self.pil))
         # Define the optimizer
         optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate) 
         if(self.use_cuda):
@@ -371,47 +372,58 @@ class full_pipeline_trainer():
             epoch_loss_val = 0
             print('Epoch: '+str(epoch))
             for i, data in enumerate(tqdm(trainloader)):
-                _, images, triplets, captions, encoded_captions, _, _, _, _ = data
+                _, images, triplets, captions, encoded_captions, lengths, _, _, _, _ = data
                 images = images.to(self.device)
                 triplets = triplets.to(self.device)
+                inputs = encoded_captions[:,:-1]
+                lengths = [lengths-1 for lengths in lengths]
                 if combo:
                     # Combined Loss
-                    cap_outputs, class_outputs = self.model(images, encoded_captions, True)
+                    cap_outputs, class_outputs = self.model(images, inputs, lengths, True)
                     class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
-                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    cap_loss = criterion(cap_outputs, captions, lengths, self.word2idx, encoded_captions.shape[1] , self.device)
                     loss = 0.5*cap_loss + 0.5*class_loss
                 else:
                     # Unique Loss
-                    cap_outputs, _ = self.model(images, encoded_captions, True)
-                    cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                    cap_outputs, _ = self.model(images, captions, inputs, lengths, True)
+                    cap_loss = criterion(cap_outputs, captions, lengths, self.word2idx, encoded_captions.shape[1], self.device)
                     loss = cap_loss
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 epoch_loss_train+=loss.item()
+                # print("\nFirst cicle done!")
+                # exit(0)
             
             with torch.no_grad():
                 self.model.eval()
                 for j, data in enumerate(tqdm(valloader)):
-                    _, images, triplets, captions, encoded_captions, _, _, _, _ = data
+                    _, images, triplets, captions, encoded_captions, lengths, _, _, _, _ = data
                     images = images.to(self.device)
                     triplets = triplets.to(self.device)
                     if combo:
                         # Combined Loss
-                        cap_outputs, class_outputs = self.model(images)
+                        try:
+                            cap_outputs, class_outputs = self.model(images)
+                        except:
+                            cap_outputs, class_outputs = self.model(images, captions, encoded_captions, lengths, training=False)
                         class_loss = multitask_loss(nn.CrossEntropyLoss(), class_outputs, triplets).mean()
-                        cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        cap_loss = criterion(cap_outputs, captions, lengths, self.word2idx, encoded_captions.shape[1] , self.device)
                         loss = 0.5*cap_loss + 0.5*class_loss
                     else:
                         # Unified Loss
-                        cap_outputs, _ = self.model(images)
-                        cap_loss = criterion(cap_outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
+                        try:
+                            cap_outputs, _ = self.model(images)
+                        except:
+                            cap_outputs, _ = self.model(images, captions, encoded_captions, lengths, training=False)
+                        cap_loss = criterion(cap_outputs, captions, lengths, self.word2idx, encoded_captions.shape[1] , self.device)
                         loss = cap_loss
                     epoch_loss_val+=loss.item()
                     
             
             print('Training loss: {:.3f}'.format(epoch_loss_train/i))
             print('Validation loss: {:.3f}'.format(epoch_loss_val/j))
+            
             # Saving the losses for plotting purposes
             if plot:
                 train_losses.append(epoch_loss_train/i)
@@ -558,7 +570,8 @@ class waterfall_trainer():
     Class to train the Waterfall pipeline using a caption generator pre-trained on UCM.
     The dataset should return the graphs, captions, max_sequence_length and word2idx dictionary
     '''
-    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None):
+    def __init__(self, model, dataset_train, dataset_val, collate_fn, word2idx, max_capt_length, save_path, use_cuda=True, device = None, pil=False):
+        self.pil = pil
         self.model = model
         self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
@@ -580,8 +593,8 @@ class waterfall_trainer():
             train_losses = []
             val_losses = []
         # Define dataloader
-        trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=True, collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
-        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True))
+        trainloader = DataLoader(self.dataset_train, batch_size=batch_size, shuffle=True, collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True, pil=self.pil))
+        valloader = DataLoader(self.dataset_val,batch_size=1,shuffle=False,collate_fn=partial(self.collate_fn, word2idx=self.word2idx, training=True, pil=self.pil))
         # Define the optimizer
         optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate)
         if(self.use_cuda):
@@ -603,8 +616,8 @@ class waterfall_trainer():
                 # print("Graph feats: ", graph_feats.shape)
                 # exit(0)
                 graphs, graph_feats = graphs.to(self.device), graph_feats.to(self.device)
-                img = img.to(self.device)
-                outputs = self.model(graphs, graph_feats, img, encoded_captions)
+                # img = img.to(self.device)
+                outputs = self.model(graphs, graph_feats, encoded_captions, training=True)
                 optimizer.zero_grad()
                 loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                 loss.backward()
@@ -617,8 +630,8 @@ class waterfall_trainer():
                         imgid, img, triplets, captions, encoded_captions = data
                         graphs, graph_feats = tripl2graphw(triplets, self.feature_encoder, self.tokenizer)
                         graphs, graph_feats = graphs.to(self.device), graph_feats.to(self.device)
-                        img = img.to(self.device)
-                        outputs = self.model(graphs, graph_feats, img, encoded_captions)
+                        # img = img.to(self.device)
+                        outputs = self.model(graphs, graph_feats, encoded_captions, training=False)
                         loss = criterion(outputs, captions, self.word2idx, encoded_captions.size(1), self.device)
                         epoch_loss_val+=loss.item()
                     

@@ -14,3 +14,4 @@ model.pth
 *.json
 *.csv
 *.pkl
+*.png

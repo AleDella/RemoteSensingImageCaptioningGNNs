@@ -1,9 +1,10 @@
+from cProfile import label
 from turtle import forward
 import torch
 import torch.nn as nn
 from torchvision.models import resnet152, ResNet152_Weights, VGG16_Weights, vgg16
 from torch.nn.utils.rnn import pack_padded_sequence
-from gnn import GNN, LSTMDecoder, _encode_seq_to_arr, decoderRNN, MLAPModel
+from gnn import GNN, LSTMDecoder, encode_seq_to_arr_loss, decoderRNN, MLAPModel, fixed_seq_to_arr
 from transformers import BertModel, BertTokenizer
 from graph_utils import tripl2graph
 
@@ -12,8 +13,9 @@ class TripletClassifier(nn.Module):
     Model which takes as input an image and predict the corresponding tripts that are in that image. 
     It will be based on resnet-152 for the extraction of the features, so it will be a finetuning on the target dataset.
     '''
-    def __init__(self, input_size, num_classes):
+    def __init__(self, input_size, num_classes, pil=False):
         super(TripletClassifier, self).__init__()
+        self.pil = pil
         self.input_size = input_size
         self.num_classes = num_classes
         weights = ResNet152_Weights.DEFAULT
@@ -55,6 +57,7 @@ class CaptionGenerator(nn.Module):
     '''
     def __init__(self, feats_dim, max_seq_len, vocab2idx, gnn='gat', vir=False, res=False, depth=1, decoder='lstm') -> None:
         super(CaptionGenerator, self).__init__()
+        self.max_seq_len = max_seq_len
         if gnn == 'gat' or gnn == 'gcn':
             self.encoder = GNN(feats_dim, gnn)
         elif gnn == 'mlap':
@@ -65,25 +68,46 @@ class CaptionGenerator(nn.Module):
         if self.decoder_type == 'lstm':
             self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
         if self.decoder_type == 'rnn':
-            self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 3)
+            self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 1, max_seq_len)
         self.dropout = nn.Dropout(p=0.3)
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
 
-    def forward(self, g, feats, labels):
+    def forward(self, g, feats, labels, training):
         graph_feats = self.dropout(self.encoder(g, feats))
         
         if self.decoder_type == 'linear':
             decoded_out = [d(graph_feats) for d in self.decoder]
         if self.decoder_type == 'lstm':
-            decoded_out = self.decoder(g, graph_feats, labels)
+            decoded_out = self.decoder(g, graph_feats, labels, training)
         if self.decoder_type == 'rnn':
-            decoded_out = self.decoder(graph_feats, labels)
+            decoded_out = self.decoder(graph_feats)
         return decoded_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
-        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
-        return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+        if self.decoder_type == 'lstm' or self.decoder_type == 'rnn':
+            new_labels = []
+            for label in labels:
+                tmp = []
+                for l in label:
+                    tmp.append(l[1:])
+                new_labels.append(tmp)
+            # batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in new_labels])
+            batched_label = fixed_seq_to_arr(new_labels, vocab2idx, self.max_seq_len)# (batch_size, num_captions, tokens)
+            batched_label = batched_label.transpose(0,1) # (num_captions, batch_size, tokens)
+            batched_label = batched_label.flatten(1,2)# (num_captions, batch_szie*tokens)
+            if type(out) == list:
+                out = torch.vstack(out)
+            else:
+                out = out.flatten(0, 1)# (batch_szie*tokens, vocab_len)
+            c_loss = 0.0
+            for gt in batched_label:
+                c_loss += nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, gt.to(device=device))
+            return c_loss/batched_label.shape[0]# Mean of the losses for each of the 5 captions
+            
+        else:
+            batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])
+            return sum([nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
 
 
@@ -141,7 +165,7 @@ class AugmentedCaptionGenerator(nn.Module):
         return decoded_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
-        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
+        batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
     
 
@@ -169,8 +193,9 @@ class MultiHead(torch.nn.Module):
 
 class MultiHeadClassifier(nn.Module):
     
-    def __init__(self, input_size, dict_size):
+    def __init__(self, input_size, dict_size, pil=False):
         super(MultiHeadClassifier, self).__init__()
+        self.pil=pil
         self.input_size = input_size
         weights = ResNet152_Weights.DEFAULT
         self.backbone = resnet152(weights=weights)
@@ -201,14 +226,15 @@ class FinalModel(nn.Module):
         vocab2idx: dictionary for one hot encoding of tokens
         decoder: type of decoder (linear, lstm or rnn)
     '''
-    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, img_dim, tripl2idx, gnn='gat', res=False, vir=True, depth=1, decoder='lstm') -> None:
+    def __init__(self, img_encoder, feats_dim, max_seq_len, vocab2idx, img_dim, tripl2idx, gnn='gat', res=False, vir=True, depth=1, decoder='lstm', pil=False) -> None:
         super(FinalModel, self).__init__()
+        self.max_seq_len = max_seq_len
         if gnn == 'gat' or gnn == 'gcn':
             self.graph_encoder = GNN(feats_dim, gnn)
         elif gnn == 'mlap':
             self.graph_encoder = MLAPModel(res, vir, feats_dim, depth)
-        # self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx))
-        self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx))
+        self.tripl_classifier = MultiHeadClassifier(img_dim, len(tripl2idx),pil)
+        # self.tripl_classifier = TripletClassifier(img_dim, len(tripl2idx), pil)
         self.sigmoid = nn.Sigmoid()
         self.idx2tripl = {v: k for k, v in tripl2idx.items()}
         self.feature_encoder = BertModel.from_pretrained("bert-base-uncased")
@@ -228,24 +254,24 @@ class FinalModel(nn.Module):
         if self.decoder_type == 'linear':
             # self.decoder = nn.ModuleList([nn.Linear(feats_dim, len(vocab2idx)) for _ in range(max_seq_len)])
             # For modified concatenation
-            self.decoder = nn.ModuleList([nn.Linear(feats_dim*2, len(vocab2idx)) for _ in range(max_seq_len)])
+            self.decoder = nn.ModuleList([nn.Linear(feats_dim*2, len(vocab2idx)) for _ in range(self.max_seq_len)])
         if self.decoder_type == 'lstm':
-            self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
+            self.decoder = LSTMDecoder(feats_dim*2, self.max_seq_len, vocab2idx)
         if self.decoder_type == 'rnn':
-            self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 3)
+            self.decoder = decoderRNN(feats_dim*2, len(vocab2idx), feats_dim*2, 1, self.max_seq_len)
         self.dropout = nn.Dropout(p=0.3)
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
 
-    def forward(self, img, labels=None, training=False):
+    def forward(self, img, captions, labels=None, lengths=None, training=False):
         # Triplet classification
         triplets = self.sigmoid(self.tripl_classifier(img))
         # For normal classifier
-        class_out = triplets
-        # # For multihead classifier
-        # triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
         # class_out = triplets
-        # triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
+        # # For multihead classifier
+        triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
+        class_out = triplets
+        triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
         # # Changed for BCE loss
         # Extract indeces greater or equal than the threshold
         threshold = 0.5
@@ -273,13 +299,42 @@ class FinalModel(nn.Module):
         # Need to solve the problem with lstm and rnn for the labels
         if self.decoder_type == 'lstm':
             decoded_out = self.decoder(graph, mod_feats, labels, training)
-        # if self.decoder_type == 'rnn':
-        #     decoded_out = self.decoder(mod_feats, labels)
+        if self.decoder_type == 'rnn':
+            decoded_out = self.decoder(mod_feats, labels, lengths)
+        
         return decoded_out, class_out
 
-    def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
-        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
-        return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+    def _loss(self, out, labels, lenghts, vocab2idx, max_seq_len, device) -> torch.Tensor:
+        
+        if self.decoder_type == 'lstm' or self.decoder_type == 'rnn':
+            new_labels = [label[1:] for label in labels]
+            # batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in new_labels])
+            batched_label = fixed_seq_to_arr(new_labels, vocab2idx, max_seq_len)# (batch_size, num_captions, tokens)
+            targets = pack_padded_sequence(batched_label, lenghts, batch_first=True)[0]
+            # batched_label = batched_label.transpose(0,1) # (num_captions, batch_size, tokens)
+            # batched_label = batched_label.flatten(1,2)# (num_captions, batch_szie*tokens)
+            batched_label = batched_label.flatten(0,1)
+            #out = out.flatten(0, 1)# (batch_szie*tokens, vocab_len)
+            
+            # c_loss = 0.0
+            # for gt in batched_label:
+            #     c_loss += nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, gt.to(device=device))
+            c_loss = nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out, targets.to(device=device))
+            # return c_loss/batched_label.shape[0]# Mean of the losses for each of the 5 captions
+            return c_loss
+            
+        else:
+            batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])
+            return sum([nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+        
+        print("\n",batched_label.shape)
+        print(out.shape)
+        
+        print(batched_label.shape)
+        print(out.shape)
+        exit(0)
+        # return sum([nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+        # batched_label = batched_label.flatten()
     
 
 
@@ -332,7 +387,7 @@ class FinetunedModel(nn.Module):
         return decoded_out, class_out
 
     def _loss(self, out, labels, vocab2idx, max_seq_len, device) -> torch.Tensor:
-        batched_label = torch.vstack([_encode_seq_to_arr(label, vocab2idx, max_seq_len) for label in labels])
+        batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])
         return sum([nn.CrossEntropyLoss()(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
 
 

@@ -2,7 +2,7 @@ from torch.utils.data import DataLoader
 import torch
 from tqdm import tqdm
 import dgl
-from graph_utils import bleuFormat, decode_output, get_node_features, tripl2graphw
+from graph_utils import bleuFormat, decode_output, get_node_features, tripl2graphw, fixed_decode_output
 import json
 from functools import partial
 from dataset import collate_fn_captions, collate_fn_classifier, augmented_collate_fn, collate_fn_full, collate_fn_waterfall
@@ -136,7 +136,7 @@ def eval_classification(dataset, model, filename, verbose=False):
         
         
         
-def eval_pipeline(dataset, model, filename):
+def eval_pipeline(dataset, model, filename, pil):
     '''
     Function that tests a model
     
@@ -148,7 +148,7 @@ def eval_pipeline(dataset, model, filename):
     Return:
         None
     '''
-    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_full, triplet_to_idx=dataset.triplet_to_idx, word2idx=dataset.word2idx, training=True))
+    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_full, triplet_to_idx=dataset.triplet_to_idx, word2idx=dataset.word2idx, training=True, pil=pil))
     # Set the correct device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -160,8 +160,12 @@ def eval_pipeline(dataset, model, filename):
         for _, data in enumerate(tqdm(testloader)):
             ids, images, _, _, _, _, _, _, _ = data
             images = images.to(device)
-            cap_outputs, _ = model(images)
-            decoded_outputs = decode_output(cap_outputs, idx2word)
+            try:
+                cap_outputs, _ = model(images, training=False)
+            except:
+                cap_outputs, _ = model(images)
+            # decoded_outputs = decode_output(cap_outputs, idx2word)
+            decoded_outputs = fixed_decode_output(cap_outputs, idx2word)
             for i, id in enumerate(ids):
                 result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
@@ -170,7 +174,7 @@ def eval_pipeline(dataset, model, filename):
     # Transform the output in bleu Format for the evaluation
     bleuFormat(filename)
     
-def eval_waterfall(dataset, model, filename):
+def eval_waterfall(dataset, model, filename, pil):
     '''
     Function that tests a model
     
@@ -182,7 +186,7 @@ def eval_waterfall(dataset, model, filename):
     Return:
         None
     '''
-    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_waterfall, word2idx=dataset.word2idx, training=True))
+    testloader = DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=partial(collate_fn_waterfall, word2idx=dataset.word2idx, training=True, pil=pil))
     # Set the correct device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
@@ -197,9 +201,9 @@ def eval_waterfall(dataset, model, filename):
             ids, img, triplets, _, encoded_captions = data
             graphs, graph_feats = tripl2graphw(triplets, feature_encoder, tokenizer)
             graphs, graph_feats = graphs.to(device), graph_feats.to(device)
-            img = img.to(device)
-            outputs = model(graphs, graph_feats, img, encoded_captions)
-            decoded_outputs = decode_output(outputs, idx2word)
+            # img = img.to(device)
+            outputs = model(graphs, graph_feats, encoded_captions, training=False)
+            decoded_outputs = fixed_decode_output(outputs, idx2word)
             for i, id in enumerate(ids):
                 result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
             
@@ -236,7 +240,7 @@ if __name__ == "__main__":
     import json
     
     # Load the predictions
-    with open('prova_decoder.json','r') as file:
+    with open('prova_rnn_captions.json','r') as file:
         predictions = json.load(file)
     
     for key, value in predictions.items():

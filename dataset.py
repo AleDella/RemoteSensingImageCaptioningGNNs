@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer, BertModel
 import cv2
 from graph_utils import pad_encodings, load_graph_data, load_json
+from PIL import Image
+from torchvision.transforms import ToTensor
 
 
 # Util function copied by extract_triplets
@@ -84,14 +86,15 @@ def collate_fn_captions(data, word2idx, training):
 
     return [d['imgid'] for d in data], [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
 
-def collate_fn_waterfall(data, word2idx, training):
+def collate_fn_waterfall(data, word2idx, training, pil):
     '''
     Collate function for the graph to caption in the waterfall pipeline
     '''
     # Image part
     images = [d['image'] for d in data]    
     images = torch.stack(images, 0)
-    images = images.permute(0,3,1,2)
+    if not pil:
+        images = images.permute(0,3,1,2)
     # Between 0 and 1 for pytorch
     images = images/255
     triplets = [d['triplets'] for d in data]
@@ -158,20 +161,45 @@ def augmented_collate_fn(data, word2idx, training):
 
 
 
-def collate_fn_full(data, triplet_to_idx, word2idx, training):
+def collate_fn_full(data, triplet_to_idx, word2idx, training, pil):
     '''
     Collate function to train the full pipeline
     '''
-    images = [d['image'] for d in data]
-    triplets = [d['triplets'] for d in data]
+    
+     # Create the captions tensor
+    new_cap_ids = []
+    cap_length = []
+    index = torch.randperm(len(data[0]['captions']))[:1]
+    for d in data:
+        # smth = []
+        # smth_len = []
+        # for cap in d['captions']:
+        #     tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
+        #     smth_len.append(len(cap))
+        #     smth.append(tmp)
+        tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in d['captions'][index]]
+        new_cap_ids.append(tmp)
+        cap_length.append(len(tmp))
+    
+    def argsort(seq, reverse):
+        # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
+        return sorted(range(len(seq)), key=seq.__getitem__, reverse=reverse)
+    
+    sorted_indexes = argsort(cap_length, True)
+    
+    new_cap_ids = [new_cap_ids[id] for id in sorted_indexes]
+    cap_length = [cap_length[id] for id in sorted_indexes]
+    images = [data[id]['image'] for id in sorted_indexes]
+    triplets = [data[id]['triplets'] for id in sorted_indexes]
         
     images = torch.stack(images, 0)
-    images = images.permute(0,3,1,2)
+    if not pil:
+        images = images.permute(0,3,1,2)
     images = images/255
-    src_ids = [d['src_ids'] for d in data]
-    dst_ids = [d['dst_ids'] for d in data]
-    node_feats = [torch.tensor(d['node_feats'])  if type(d['node_feats']) != torch.Tensor else d['node_feats'] for d in data]
-    num_nodes = [d['num_nodes'] for d in data]
+    src_ids = [data[id]['src_ids'] for id in sorted_indexes]
+    dst_ids = [data[id]['dst_ids'] for id in sorted_indexes]
+    node_feats = [torch.tensor(data[id]['node_feats'])  if type(data[id]['node_feats']) != torch.Tensor else data[id]['node_feats'] for id in sorted_indexes]
+    num_nodes = [data[id]['num_nodes'] for id in sorted_indexes]
     max_rel = len(max(src_ids, key=len))
     max_nodes = max(num_nodes)
     
@@ -196,14 +224,7 @@ def collate_fn_full(data, triplet_to_idx, word2idx, training):
     for i, elem in enumerate(node_feats):
         new_feats[i] = elem
     
-    # Create the captions tensor
-    new_cap_ids = []
-    for d in data:
-        smth = []
-        for cap in d['captions']:
-            tmp = [word2idx[word] if word in word2idx else word2idx['<unk>'] for word in cap]
-            smth.append(tmp)
-        new_cap_ids.append(smth)
+   
     
     triplets_tensor = torch.zeros((len(triplets),len(triplet_to_idx))) # To store one hot encodings
     
@@ -217,7 +238,9 @@ def collate_fn_full(data, triplet_to_idx, word2idx, training):
             for triplet in image_triplet:
                 triplets_tensor[i,triplet_to_idx[str(tuple(triplet))]] = 1
     
-    return [d['imgid'] for d in data], images, triplets_tensor, [d['captions'] for d in data], pad_encodings(new_cap_ids, word2idx['<pad>'], training=training), src_ids, dst_ids, new_feats, num_nodes
+    
+    
+    return [data[id]['imgid'] for id in sorted_indexes], images, triplets_tensor, [data[id]['captions'][index] for id in sorted_indexes], pad_encodings(new_cap_ids, word2idx['<pad>'], index, training=training), cap_length, src_ids, dst_ids, new_feats, num_nodes
 
 ################################################
 
@@ -274,13 +297,11 @@ class TripletDataset(Dataset):
         
         return out
 
-
-
 class UCMDataset(TripletDataset):
     '''
     Class for transforming triplets in graphs for the UCM dataset
     '''
-    def __init__(self, image_folder, image_filenames, graph_path, polished_tripl_path, caption_path, word2idx_path, return_keys, split='train'):
+    def __init__(self, image_folder, image_filenames, graph_path, polished_tripl_path, caption_path, word2idx_path, return_keys, split='train', pil=False):
         '''
         Args:
             image_folder: path to the folder with all the images
@@ -309,8 +330,14 @@ class UCMDataset(TripletDataset):
                     path = image_folder + file.replace('\n', '')
                 except:
                     path = image_folder + '/' + file.replace('\n', '')
-                img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
-                self.images[id] = torch.from_numpy(img.copy())
+                if pil:
+                    img = Image.open(path)
+                    totensor = ToTensor()
+                    self.images[id] = totensor(img)
+                else:
+                    img = cv2.imread(path)[:,:,::-1] # CV2 reads images in BGR, so convert to RGB for the networks 
+                    self.images[id] = torch.from_numpy(img.copy())
+                
         
         # FOR TRIPLET CLASSIFICATION
         self.triplet_to_idx = polished_data['Triplet_to_idx']
@@ -318,7 +345,7 @@ class UCMDataset(TripletDataset):
             self.triplets = {id:value for (id,value) in polished_data.items() if id not in discarded_ids}
         else:
             self.triplets = {id:value for (id,value) in polished_data[split].items() if id not in discarded_ids}
-
+            
         # Captions part
         self.captions = {}
         self.max_capt_length = 0
@@ -345,7 +372,7 @@ class UCMDataset(TripletDataset):
 # Class for the RSICD dataset
 class RSICDDataset(TripletDataset):
     
-    def __init__(self, image_folder, graph_path, polished_tripl_path, annotation_path, word2idx_path, return_keys, split='train') -> None:
+    def __init__(self, image_folder, graph_path, polished_tripl_path, annotation_path, word2idx_path, return_keys, split='train', pil=False) -> None:
         '''
         Args:
             image_folder: path to the folder with all the images

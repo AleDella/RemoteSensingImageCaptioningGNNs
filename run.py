@@ -20,6 +20,7 @@ parser.add_argument('--depth',   type=int,            default=1,               r
 parser.add_argument('--attr',    action='store_true',                          required=False, help='If True, use virtual node.')
 parser.add_argument('--plt',     action='store_true',                          required=False, help='If True, save the plots.')
 parser.add_argument('--combo',   action='store_true',                          required=False, help='If True, use the combined loss during training; use the unique one otherwise.')
+parser.add_argument('--pil',     action='store_true',                          required=False, help='If True, use PIL module for images; use OpenCV module otherwise.')
 
 
 if __name__=="__main__":
@@ -33,7 +34,8 @@ if __name__=="__main__":
                 args.gnn,
                 args.vir,
                 args.depth,
-                args.attr
+                args.attr,
+                args.pil
                 )
     else:
         train_gnn(args.dataset,
@@ -50,5 +52,6 @@ if __name__=="__main__":
                 args.depth,
                 args.attr,
                 args.plt,
-                args.combo
+                args.combo,
+                args.pil
                 )
