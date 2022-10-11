@@ -271,23 +271,47 @@ class decoderRNN(nn.Module):
     '''
     RNN decoder for graph features
     '''
-    def __init__(self, embed_size,vocab_size, hidden_size, num_layers, max_len):
+    def __init__(self, embed_size, vocab2idx, hidden_size, num_layers, max_len):
         super(decoderRNN, self).__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_size, padding_idx=0)
+        self.embedding = nn.Embedding(len(vocab2idx), embed_size, padding_idx=0)
         self.lstm = nn.LSTM(embed_size, hidden_size, num_layers, batch_first=True)
-        self.linear = nn.Linear(hidden_size, vocab_size)
-        self.softmax = nn.Softmax()
+        self.linear = nn.Linear(hidden_size, len(vocab2idx))
         self.max_len = max_len
+        self.vocab2idx = vocab2idx
     
     def forward(self, features, encoded_captions, lengths):
         # Feature size: [batch_size, BERT_feat_dim*2]
         # Produce the initial embeddings with <sos>
         # embeddings = self.embedding(torch.ones((features.shape[0], self.max_len), dtype=torch.int64, device=features.device)) # (batch_size, max_len, BERT_feat_dim*2)
+        # print(encoded_captions.shape)
+        # print(encoded_captions)
+        # print(lengths)
         embeddings = self.embedding(encoded_captions.to(features.device))
         packed_embs = pack_padded_sequence(embeddings, lengths, batch_first=True)
         hiddens, _ = self.lstm(packed_embs, (features.clone().unsqueeze(0), features.clone().unsqueeze(0)))
         outputs = self.linear(hiddens[0]) # (batch_size, max_len, num_vocabs)
         return outputs
+    
+    def sample(self, features):
+        # Takes as input the features from the graph and produce a caption
+        self.eval()
+        with torch.no_grad():
+            sampled_ids = []
+            inputs = torch.ones((1, 1)).long()
+            inputs = inputs.to(features.device)
+            inputs = self.embedding(inputs)
+            hidden = features.clone().unsqueeze(0)
+            cell = features.clone().unsqueeze(0)
+            for i in range(self.max_len-1):
+                y_pred, (hidden, cell) = self.lstm(inputs, (hidden, cell))
+                y_pred = self.linear(y_pred)
+                y_pred = torch.argmax(y_pred.squeeze(0),dim=1)
+                inputs = torch.cat((inputs,self.embedding(y_pred[-1].unsqueeze(0).unsqueeze(0))),dim=1)
+                if(y_pred[-1].item()==2 or i==self.max_len-1):
+                   break
+                sampled_ids.append(y_pred[-1].item())
+        
+        return sampled_ids
 
 # Testing
 if __name__ == '__main__':

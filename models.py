@@ -68,7 +68,7 @@ class CaptionGenerator(nn.Module):
         if self.decoder_type == 'lstm':
             self.decoder = LSTMDecoder(feats_dim, max_seq_len, vocab2idx)
         if self.decoder_type == 'rnn':
-            self.decoder = decoderRNN(feats_dim, len(vocab2idx), feats_dim, 1, max_seq_len)
+            self.decoder = decoderRNN(feats_dim, vocab2idx, feats_dim, 1, max_seq_len)
         self.dropout = nn.Dropout(p=0.3)
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
@@ -105,6 +105,14 @@ class CaptionGenerator(nn.Module):
         else:
             batched_label = torch.vstack([encode_seq_to_arr_loss(label, vocab2idx, max_seq_len) for label in labels])
             return sum([nn.CrossEntropyLoss(ignore_index=vocab2idx['<pad>'])(out[i], batched_label[:, i].to(device=device)) for i in range(max_seq_len)])/max_seq_len
+    
+    def sample(self, graph, graph_feats):
+        self.eval()
+        with torch.no_grad():
+            graph_feats = self.dropout(self.encoder(graph, graph_feats))
+            # Mod feats with concatenation
+            caption = self.decoder.sample(graph_feats)
+            return caption
 
 
 
@@ -255,7 +263,7 @@ class FinalModel(nn.Module):
         if self.decoder_type == 'lstm':
             self.decoder = LSTMDecoder(feats_dim*2, self.max_seq_len, vocab2idx)
         if self.decoder_type == 'rnn':
-            self.decoder = decoderRNN(feats_dim*2, len(vocab2idx), feats_dim*2, 1, self.max_seq_len)
+            self.decoder = decoderRNN(feats_dim*2, vocab2idx, feats_dim*2, 1, self.max_seq_len)
         self.dropout = nn.Dropout(p=0.3)
         self.vocab2idx = vocab2idx
         self.idx2vocab = {v: k for k, v in vocab2idx.items()}
@@ -300,6 +308,33 @@ class FinalModel(nn.Module):
             decoded_out = self.decoder(mod_feats, labels, lengths)
         
         return decoded_out, class_out
+    
+    def sample(self, img):
+        self.eval()
+        with torch.no_grad():
+            triplets = self.sigmoid(self.tripl_classifier(img))
+            triplets = triplets.reshape((triplets.shape[0], int(triplets.shape[1]/2), 2))
+            triplets = [[torch.argmax(logits).item() for logits in img] for img in triplets]
+            # # Changed for BCE loss
+            # Extract indeces greater or equal than the threshold
+            threshold = 0.5
+            indeces = [[ i for i, d in enumerate(s) if d >= threshold] for s in triplets ]
+            # Extract the triplets
+            triplets = [[self.idx2tripl[i] for i in s] for s in indeces]
+            # Add "proxy" triplets due to the fact that the network can't process void triplets
+            for s in triplets:
+                if s == []:
+                    s.append("('There', 'is', 'no triplet')")
+            # Retrieve the graph and graph features
+            graph, graph_feats = tripl2graph(triplets, self.feature_encoder, self.tokenizer)
+            i_feats = self.img_encoder(img)
+            graph, graph_feats = graph.to(img.device), graph_feats.to(img.device)
+            graph_feats = self.dropout(self.graph_encoder(graph, graph_feats))
+            # Mod feats with concatenation
+            mod_feats = torch.cat([graph_feats, i_feats], dim=1)
+            caption = self.decoder.sample(mod_feats)
+            return caption
+        
 
     def _loss(self, out, labels, lenghts, vocab2idx, max_seq_len, device) -> torch.Tensor:
         

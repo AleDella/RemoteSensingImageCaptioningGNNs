@@ -160,14 +160,12 @@ def eval_pipeline(dataset, model, filename, pil):
         for _, data in enumerate(tqdm(testloader)):
             ids, images, _, captions, encoded_captions, lengths, _, _, _, _ = data
             images = images.to(device)
-            try:
-                cap_outputs, _ = model(images, captions, encoded_captions, lengths, training=False)
-            except:
-                cap_outputs, _ = model(images)
+            cap_output = model.sample(images)
             # decoded_outputs = decode_output(cap_outputs, idx2word)
-            decoded_outputs = fixed_decode_output(cap_outputs, idx2word)
-            for i, id in enumerate(ids):
-                result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
+            #decoded_outputs = fixed_decode_output(cap_output, idx2word)
+            decode_output = [idx2word[idx] for idx in cap_output]
+            for _, id in enumerate(ids):
+                result[id] = {"caption length": len(decode_output),"caption ": decode_output}
             
     with open(filename, "w") as outfile:
         json.dump(result, outfile) 
@@ -198,14 +196,15 @@ def eval_waterfall(dataset, model, filename, pil):
         model.eval()
         result = {}
         for _, data in enumerate(tqdm(testloader)):
-            ids, img, triplets, _, encoded_captions = data
+            ids, _, triplets, _, _, _ = data
             graphs, graph_feats = tripl2graphw(triplets, feature_encoder, tokenizer)
             graphs, graph_feats = graphs.to(device), graph_feats.to(device)
             # img = img.to(device)
-            outputs = model(graphs, graph_feats, encoded_captions, training=False)
-            decoded_outputs = fixed_decode_output(outputs, idx2word)
-            for i, id in enumerate(ids):
-                result[id] = {"caption length": len(decoded_outputs[i]),"caption ": decoded_outputs[i]}
+            outputs = model.sample(graphs, graph_feats)
+            # decoded_outputs = fixed_decode_output(outputs, idx2word)
+            decoded_output = [idx2word[idx] for idx in outputs]
+            for _, id in enumerate(ids):
+                result[id] = {"caption length": len(decoded_output),"caption ": decoded_output}
             
     with open(filename, "w") as outfile:
         json.dump(result, outfile)
@@ -240,7 +239,7 @@ if __name__ == "__main__":
     import json
     
     # Load the predictions
-    with open('prova_rnn_captions.json','r') as file:
+    with open('w_mlap_rnn_captions.json','r') as file:
         predictions = json.load(file)
     
     for key, value in predictions.items():
