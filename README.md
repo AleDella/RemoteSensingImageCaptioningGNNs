@@ -1,4 +1,4 @@
-# Provone
+# Remote Sensing image captioning using graph neural networks
 
 ## Basic usage of the project:
 
@@ -17,12 +17,5 @@
 <li> <code> --thresh </code>: threshold of early stopping</li>
 <li> <code> --test </code>: do the run in test mode (currently implemented only with "tripl2caption")</li>
 <li> <code> --o </code>: name of the file with the results of the testing</li>
-
-# TODO LIST 
-- [X] do the dictionary of the captions for UCM and RSICD (key: image_id, value: caption, list of tokens)
-- [X] do the complete pipeline (from image to caption) train and validation 
-- [X] performance of the triplet classifier
-- [ ] find a method to improve classifier
-- [X] Begin the presentation (introduction to GNN)
 
 
