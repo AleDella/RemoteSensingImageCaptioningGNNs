@@ -25,7 +25,7 @@ In order to run the training/inference on the models, execute the command below 
 ```bash
 python run.py
 ```
-In order to prepare the dataset, execute the file `extract_triplets.py` which will produce a json with the triplets extracted from the captions of the dataset. 
+In order to prepare the dataset, execute the file `extract_triplets.py` which will produce a json with the triplets extracted from the captions of the dataset. After that, execute `create_graph_data.py` to create the graph data from the triplets.
 
 ### Possible arguments:
 
