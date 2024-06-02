@@ -27,7 +27,7 @@ python run.py
 ```
 In order to prepare the dataset, execute the file `extract_triplets.py` which will produce a json with the triplets extracted from the captions of the dataset. After that, execute `create_graph_data.py` to create the graph data from the triplets.
 
-### Possible arguments:
+#### Possible arguments for `run.py`:
 
 <li> <code> --dataset </code>: name of the dataset used for the run (currently "ucm" or "rsicd")</li>
 <li> <code> --task </code>: name of the desired task (currently "tripl2caption" or "img2tripl")</li>
@@ -40,6 +40,11 @@ In order to prepare the dataset, execute the file `extract_triplets.py` which wi
 <li> <code> --thresh </code>: threshold of early stopping</li>
 <li> <code> --test </code>: do the run in test mode (currently implemented only with "tripl2caption")</li>
 <li> <code> --o </code>: name of the file with the results of the testing</li>
+
+## General model overview:
+
+![Triplet to graph conversion.](images/tripl2graph.PNG)
+![Triplet to graph conversion.](images/tripl2graph.PNG)
 
 ## References:
 [1] Ali, Nouman; Zafar, Bushra (2018). UCM image dataset. figshare. Dataset. https://doi.org/10.6084/m9.figshare.6085976.v2
